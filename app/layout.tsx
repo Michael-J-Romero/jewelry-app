@@ -14,8 +14,8 @@ const display = Playfair_Display({
 });
 
 export const metadata: Metadata = {
-  title: 'Luna Jewel Atelier',
-  description: 'Luxury jewelry storefront starter built with Next.js, MUI, Motion, and Embla.',
+  title: 'NorVoch | Build Your Ear',
+  description: 'Brand-aligned luxury jewelry builder experience for curating an ear stack.',
 };
 
 export default function RootLayout({
