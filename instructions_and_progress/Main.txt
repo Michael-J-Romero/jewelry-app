@@ -1,0 +1,421 @@
+NORVOCH JEWELRY BUILDER PAGE
+FULL BRAND-ALIGNED UI / UX / DESIGN SPEC (EXTENSIVE)
+1. PRODUCT DEFINITION
+
+This page is a hybrid between a luxury ecommerce interface and an interactive styling tool.
+
+It must feel like:
+
+a natural extension of NorVoch’s storefront
+not a separate “app”
+not overly experimental
+Core user mindset
+
+The user is:
+
+browsing jewelry
+discovering pieces
+visualizing combinations
+building a curated ear stack
+intending (or considering) purchasing
+Core experience loop
+User sees ear + catalog
+User selects a piercing
+Catalog updates to relevant products
+User browses + filters
+User places jewelry
+Visual updates instantly
+Cart awareness increases
+User continues building or purchases
+2. GLOBAL PAGE STRUCTURE
+Layout
+[ Fixed Header ]
+
+[ Left Panel (Builder) ] | [ Right Panel (Catalog) ]
+Dimensions
+Header: fixed height (~64–80px)
+Main content: fills viewport height
+Left panel: 55–60%
+Right panel: 40–45%
+Behavior
+Header remains fixed
+Left panel remains fixed (no vertical scroll)
+Right panel scrolls internally
+3. BRAND VISUAL SYSTEM (NORVOCH-ALIGNED)
+3.1 Color System
+Base palette
+Role	Color Description
+Page background	Warm white / ivory
+Panel background	Slightly cooler white or neutral
+Card surface	Pure white
+Borders	Soft taupe-gray
+Primary text	Deep charcoal
+Secondary text	Medium gray
+Tertiary text	Light gray
+Accent color
+
+Muted gold (core brand signal)
+
+Used for:
+
+active states
+selected markers
+tab underline
+hover highlights
+selected product
+key emphasis (sparingly)
+
+Avoid:
+
+bright yellow gold
+gradients
+metallic shine effects
+Supporting tones
+
+Optional:
+
+soft beige
+pale blush
+
+Used only for:
+
+background variation
+hover surfaces
+3.2 Typography
+Font system
+Primary font (UI)
+modern sans-serif
+used for all UI elements
+Secondary font (accent serif)
+used sparingly for:
+page title
+section headers
+Typography hierarchy
+Level 1 – Page Title
+serif
+medium-large size
+relaxed tracking
+Level 2 – Section Headers
+serif or refined sans
+medium weight
+Level 3 – Functional Labels
+sans
+medium size
+used for tabs, filters, controls
+Level 4 – Product Names
+sans
+slightly emphasized
+max 2 lines
+Level 5 – Metadata
+small sans
+muted
+Typography behavior
+generous line-height
+avoid tight stacking
+minimal bold usage
+slight letter spacing for UI labels
+3.3 Spacing System
+Global spacing scale
+
+Use consistent spacing increments:
+
+4 / 8 / 12 / 16 / 20 / 24 / 32 / 40 / 48 / 64
+Key spacing rules
+Panel padding: 24–32px
+Section spacing: 24–32px
+Card spacing: 16–20px
+Grid gap: 16–20px
+Control spacing: 12–16px
+White space philosophy
+
+Compared to ultra-minimal:
+
+slightly denser
+still premium
+never cramped
+
+Goal:
+“Product-rich but breathable”
+
+3.4 Borders & Radius
+Border style
+thin (1px)
+soft neutral color
+used frequently instead of heavy shadows
+Radius
+Element	Radius
+Buttons	small-medium
+Cards	medium
+Modals	medium-large
+
+Avoid:
+
+overly round shapes
+3.5 Shadows
+minimal usage
+soft elevation only
+prefer borders + tone separation
+4. HEADER
+Layout
+Left
+NorVoch logo
+divider
+“Build Your Ear”
+Right
+Save Look
+Share
+Reset
+Cart icon
+Style
+fixed
+light background
+bottom border
+no heavy shadow
+Behavior
+always visible
+cart updates live
+actions accessible at all times
+5. LEFT PANEL — BUILDER
+Purpose
+visual focus
+interaction surface
+product visualization
+Structure
+[ Top Controls ]
+[ Ear Viewport ]
+[ Bottom Composition Bar ]
+5.1 Top Controls
+Left side
+Ear toggle (Left / Right)
+small label optional
+Right side
+Zoom in
+Zoom out
+Reset view
+Toggle markers
+Style
+icon buttons
+minimal chrome
+subtle hover states
+5.2 Ear Viewport
+Layout
+centered ear
+moderate negative space
+slightly larger than previous spec
+Anchor Markers
+Default
+small circular outline
+visible but subtle
+Hover
+gold outline
+slight scale increase
+Selected
+gold ring (clear)
+strong visual focus
+Occupied
+filled center dot
+Selected + Occupied
+gold ring + filled center
+Marker Labels
+small tooltip-like labels
+appear on hover/selection
+include:
+piercing name
+Empty State
+
+When nothing selected:
+
+subtle text:
+“Select a piercing to start building your look”
+5.3 Bottom Composition Bar
+Layout
+anchored to bottom
+spans width of left panel
+Contents
+number of pieces
+subtotal
+View Stack
+Clear All
+Style
+slightly elevated
+thin border
+more visible than ultra-minimal version
+6. RIGHT PANEL — CATALOG
+Structure
+[ Selected Anchor Header ]
+[ Tabs ]
+[ Filters ]
+[ Active Filters ]
+[ Product Grid ]
+[ Bottom Action Bar ]
+6.1 Selected Anchor Header
+When no anchor selected
+
+Show:
+
+“Start Your Look”
+Best Sellers
+Featured pieces
+When anchor selected
+
+Show:
+
+Piercing name
+Compatibility info
+Current item (if any)
+Actions
+Remove item
+Deselect anchor
+6.2 Tabs
+Tabs list
+All
+Ends
+Clickers
+Rings
+Charms
+Chains
+New
+Best Sellers
+Style
+horizontal
+visible but refined
+underline for active
+good spacing
+Behavior
+filter products
+hide incompatible categories when anchor selected
+6.3 Filters
+Layout
+
+Two rows max
+
+Filters
+Material
+Gem
+Color
+Size
+Price
+Availability
+Style
+dropdown buttons or pills
+compact but clear
+Popover
+white background
+rounded
+subtle border
+checkbox/radio options
+6.4 Active Filters
+chips below filter row
+removable
+include “Clear All”
+6.5 Product Grid
+Layout
+2 columns
+moderate density
+consistent spacing
+Product Card
+Structure
+image
+name
+metadata
+price
+action button
+States
+Default
+white card
+thin border
+Hover
+lift
+image zoom
+border highlight
+Selected
+gold outline
+“Placed” indicator
+Actions
+Add / Try On
+Replace (if occupied)
+6.6 Product Detail Panel
+Opens as
+side drawer or modal
+Contains
+image
+name
+price
+material
+gem
+size
+compatibility
+description
+Add to Selected Piercing
+Add to Cart
+7. BOTTOM ACTION BAR (RIGHT PANEL)
+Contents
+total pieces
+subtotal
+Add All to Cart
+Save Look
+Style
+sticky
+subtle elevation
+premium button
+8. CURRENT STACK SUMMARY
+Shows
+list of all placements
+thumbnail
+name
+remove/replace
+Access
+button or expandable section
+9. MERCHANDISING ELEMENTS
+Include
+Featured sections
+Best Sellers
+New Arrivals
+Collection cards
+Botanical
+Space
+Marine
+Product badges
+New
+Best Seller
+Limited
+10. INTERACTIONS
+Placement
+instant
+no modal interruption
+Replace
+immediate swap
+Remove
+accessible everywhere
+Feedback
+subtle confirmation
+UI updates instantly
+11. MOTION
+Use for
+hover states
+tab transitions
+drawers
+product transitions
+Avoid
+flashy effects
+long animations
+12. MOBILE DESIGN
+Layout
+[ Header ]
+[ Ear View ]
+[ Bottom Sheet Catalog ]
+Bottom sheet
+draggable
+contains catalog
+full filter access
+Interaction
+tap markers
+swipe catalog
+13. ACCESSIBILITY
+keyboard navigation
+focus states
+readable contrast
+large touch targets
+14. FINAL EXPERIENCE STATEMENT
+
+The NorVoch Jewelry Builder should feel like a refined extension of the brand’s ecommerce experience—balancing elegance, clarity, and product richness. It should allow users to seamlessly move between discovery, styling, and purchasing, while maintaining a calm, premium, and intuitive interface that reflects NorVoch’s emphasis on quality, craftsmanship, and curated self-expression.
