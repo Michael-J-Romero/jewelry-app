@@ -47,6 +47,10 @@ Step 5 — Real product data integration complete
 - Simplified larger-image viewing by opening the active image at full size so browser-native zoom controls handle inspection
 - Made gold color/type and pin options single-select inside the detail modal with clear active highlighting
 - Added a compact selected-product summary above the detail modal cart actions with name, price, and chosen options
+- Connected the top-right cart button to a right-side mock cart drawer with stack-based line items
+- Added mock cart subtotal, remove-item actions, and placeholder checkout/continue-shopping actions in the drawer
+- Added product thumbnails to cart drawer line items so each cart row has visual product context
+- Added remove-confirmation dialog for destructive cart actions, including direct Remove and quantity decrement to zero
 - Added lib/big-order-comparison.ts to compare manual invoice and Shopify export rows by index
 - Added row-order, title, and price validation logic: Item Name vs Line: Title and Unit Cost vs Line: Price
 - Added app/result/page.tsx to display dataset counts, mismatch totals, and a row-level mismatch table
@@ -58,6 +62,18 @@ Step 5 — Real product data integration complete
 - Added second-pass fuzzy title search for unresolved mismatches (token overlap + character similarity + length score)
 - Added per-row confidence ratings for suggested title links to export rows
 - Added summary metric for high-confidence fuzzy suggestions on /result
+- Rebuilt reconciliation to group duplicates by normalized matching key and unit price with summed quantities
+- Added grouped one-to-one quantity comparison so split rows are matched by totals instead of row position
+- Fixed blank-title display by coercing non-string title values to strings during normalization
+- Added property-aware title augmentation using Line: Properties (e.g. Angel Number value)
+- Added grouped mismatch table columns for quantities and grouped-row counts
+- Added canonical title expansion so generic export titles like Angel Numbers, Astrological Sign, and Zodiac Constellations reconcile to the manual naming style
+- Added semantic title normalization for known naming drift like 11:11:00 vs 11:11 and Diamond Cut chain naming
+- Fixed fuzzy suggestion export row labels to use the correct sample row numbers
+- Reworked grouped reconciliation to pair quantities inside each title in two passes: exact price bucket pairing first, then cross-price leftover pairing
+- Eliminated false quantity mismatches caused by split price-bucket distribution differences when total title quantities still align
+- Added dataset-level total cost calculation using unit price x quantity for both manual invoice and Shopify export rows
+- Added a clean manual-invoice CSV export route that flattens option pairs into a readable spreadsheet column set
 
 ## Delivered in the UI
 - fixed brand header with action buttons and live cart presence
@@ -75,9 +91,14 @@ Step 5 — Real product data integration complete
 - no-viewer mode now uses sticky catalog filters, hides the lower sticky cart summary bar, and opens product details from the media region
 - product cards now use an Add to Ear placeholder alert, and the detail modal now supports image swapping plus browser-native full-size image viewing
 - detail modal option chips now support one-at-a-time gold and pin selection, with the active configuration echoed above checkout actions
+- the top-right cart button now opens a sidebar mock cart with current stack items, subtotal, and checkout mock actions
+- cart drawer rows now include product image thumbnails, and item removal now requires confirmation from both remove paths
 - new /result route now displays reconciliation results for the bigOrder1 manual invoice and Shopify export datasets
 - /result now links matching titles first and only flags unmatched titles or price differences
 - /result now also suggests similar title matches for unresolved rows with confidence percentages
+- /result now surfaces quantity deltas for grouped comparisons and sample source rows for traceability
+- /result now shows manual total cost, export total cost, and the overall dataset value delta
+- /result now includes a top-right button to download a clean invoice spreadsheet as CSV
 
 ## Next planned review checkpoint
 ## Next planned work

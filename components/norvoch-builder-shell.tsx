@@ -12,6 +12,7 @@ import {
   DialogContent,
   DialogTitle,
   Divider,
+  Drawer,
   Paper,
   Snackbar,
   Stack,
@@ -53,6 +54,17 @@ type Product = {
   karatOptions?: string[];
   goldOptions?: string[];
   pinOptions?: string[];
+};
+
+type CartLineItem = {
+  id: string;
+  productId: number;
+  title: string;
+  unitPrice: number;
+  quantity: number;
+  goldOption?: string | null;
+  pinOption?: string | null;
+  placementLabel?: string;
 };
 
 const anchors: Anchor[] = [
@@ -310,6 +322,17 @@ const getSubtotal = (placements: Record<string, string>, products: Product[]) =>
   }, 0);
 };
 
+const getPriceValue = (price: string) => Number(price.replace(/[^0-9]/g, ''));
+
+const getCartLineId = (item: Omit<CartLineItem, 'quantity'>) => {
+  return [
+    item.productId,
+    item.goldOption ?? 'nogold',
+    item.pinOption ?? 'nopin',
+    item.placementLabel ?? 'noplace',
+  ].join('::');
+};
+
 const PAGE_SIZE = 24;
 
 export function NorvochBuilderShell({ initialProducts }: { initialProducts: Product[] }) {
@@ -322,13 +345,16 @@ export function NorvochBuilderShell({ initialProducts }: { initialProducts: Prod
   const [isStackOpen, setIsStackOpen] = React.useState(false);
   const [notice, setNotice] = React.useState('');
   const [savedLooks, setSavedLooks] = React.useState(0);
-  const [cartCount, setCartCount] = React.useState(1);
+  const [cartItems, setCartItems] = React.useState<CartLineItem[]>([]);
   const [visibleCount, setVisibleCount] = React.useState(PAGE_SIZE);
   const [focusedImageIndex, setFocusedImageIndex] = React.useState(0);
   const [isImagePreviewOpen, setIsImagePreviewOpen] = React.useState(false);
   const [isImagePreviewZoomed, setIsImagePreviewZoomed] = React.useState(false);
   const [selectedGoldOption, setSelectedGoldOption] = React.useState<string | null>(null);
   const [selectedPinOption, setSelectedPinOption] = React.useState<string | null>(null);
+  const [isCartDrawerOpen, setIsCartDrawerOpen] = React.useState(false);
+  const [pendingRemovalLineId, setPendingRemovalLineId] = React.useState<string | null>(null);
+  const [isRemoveConfirmOpen, setIsRemoveConfirmOpen] = React.useState(false);
 
   const selectedAnchor = anchors.find((anchor) => anchor.id === selectedAnchorId) ?? null;
   const focusedProduct = products.find((product) => product.id === focusedProductId) ?? null;
@@ -390,6 +416,17 @@ export function NorvochBuilderShell({ initialProducts }: { initialProducts: Prod
   const subtotal = getSubtotal(placements, products);
   const pieceCount = placedEntries.length;
   const selectedCurrentItem = selectedAnchorId ? placements[selectedAnchorId] : undefined;
+  const cartCount = cartItems.reduce((total, item) => total + item.quantity, 0);
+  const cartSubtotal = cartItems.reduce((total, item) => total + item.unitPrice * item.quantity, 0);
+  const productImageById = React.useMemo(() => {
+    const map = new Map<number, string | null>();
+
+    products.forEach((product) => {
+      map.set(product.id, product.images[0] ?? null);
+    });
+
+    return map;
+  }, [products]);
 
   const toggleFilter = (filter: FilterOption) => {
     setActiveFilters((current) =>
@@ -456,7 +493,38 @@ export function NorvochBuilderShell({ initialProducts }: { initialProducts: Prod
       return;
     }
 
-    setCartCount((current) => current + pieceCount);
+    setCartItems((current) => {
+      const next = [...current];
+
+      placedEntries.forEach(({ anchor, product }) => {
+        const baseItem: Omit<CartLineItem, 'quantity'> = {
+          id: '',
+          productId: product.id,
+          title: product.title,
+          unitPrice: getPriceValue(product.price),
+          placementLabel: anchor.label,
+        };
+        const id = getCartLineId(baseItem);
+        const existingIndex = next.findIndex((item) => item.id === id);
+
+        if (existingIndex >= 0) {
+          next[existingIndex] = {
+            ...next[existingIndex],
+            quantity: next[existingIndex].quantity + 1,
+          };
+          return;
+        }
+
+        next.push({
+          ...baseItem,
+          id,
+          quantity: 1,
+        });
+      });
+
+      return next;
+    });
+
     setNotice(`${pieceCount} selected pieces added to cart.`);
   };
 
@@ -465,8 +533,87 @@ export function NorvochBuilderShell({ initialProducts }: { initialProducts: Prod
       return;
     }
 
-    setCartCount((current) => current + 1);
+    setCartItems((current) => {
+      const baseItem: Omit<CartLineItem, 'quantity'> = {
+        id: '',
+        productId: focusedProduct.id,
+        title: focusedProduct.title,
+        unitPrice: getPriceValue(focusedProduct.price),
+        goldOption: selectedGoldOption,
+        pinOption: selectedPinOption,
+      };
+      const id = getCartLineId(baseItem);
+      const existingIndex = current.findIndex((item) => item.id === id);
+
+      if (existingIndex < 0) {
+        return [
+          ...current,
+          {
+            ...baseItem,
+            id,
+            quantity: 1,
+          },
+        ];
+      }
+
+      const next = [...current];
+      next[existingIndex] = {
+        ...next[existingIndex],
+        quantity: next[existingIndex].quantity + 1,
+      };
+      return next;
+    });
+
     setNotice(`${focusedProduct.title} added to cart.`);
+  };
+
+  const incrementCartLine = (lineId: string) => {
+    setCartItems((current) => current.map((item) => {
+      if (item.id !== lineId) {
+        return item;
+      }
+
+      return { ...item, quantity: item.quantity + 1 };
+    }));
+  };
+
+  const decrementCartLine = (lineId: string) => {
+    setCartItems((current) => current.map((item) => {
+      if (item.id !== lineId) {
+        return item;
+      }
+
+      if (item.quantity <= 1) {
+        setPendingRemovalLineId(lineId);
+        setIsRemoveConfirmOpen(true);
+        return item;
+      }
+
+      return { ...item, quantity: item.quantity - 1 };
+    }));
+  };
+
+  const removeCartLine = (lineId: string) => {
+    setCartItems((current) => current.filter((item) => item.id !== lineId));
+  };
+
+  const requestRemoveCartLine = (lineId: string) => {
+    setPendingRemovalLineId(lineId);
+    setIsRemoveConfirmOpen(true);
+  };
+
+  const cancelRemoveCartLine = () => {
+    setPendingRemovalLineId(null);
+    setIsRemoveConfirmOpen(false);
+  };
+
+  const confirmRemoveCartLine = () => {
+    if (pendingRemovalLineId) {
+      removeCartLine(pendingRemovalLineId);
+    }
+
+    setPendingRemovalLineId(null);
+    setIsRemoveConfirmOpen(false);
   };
 
   const showVirtualEarAlert = () => {
@@ -516,7 +663,7 @@ export function NorvochBuilderShell({ initialProducts }: { initialProducts: Prod
               NORVOCH
             </Typography>
             <Divider flexItem orientation="vertical" sx={{ display: { xs: 'none', sm: 'block' } }} />
-            <Typography variant="h6">Build Your Ear</Typography>
+            <Typography variant="h6">Virtual Ear Curation</Typography>
           </Stack>
 
           <Stack
@@ -530,7 +677,9 @@ export function NorvochBuilderShell({ initialProducts }: { initialProducts: Prod
             <Button color="inherit" size="small" onClick={saveLook}>Save Look</Button>
             <Button color="inherit" size="small" onClick={shareLook}>Share</Button>
             <Button color="inherit" size="small" onClick={clearAll}>Reset</Button>
-            <Button variant="contained" size="small">Cart · {cartCount}</Button>
+            <Button variant="contained" size="small" onClick={() => setIsCartDrawerOpen(true)}>
+              Cart · {cartCount}
+            </Button>
           </Stack>
         </Box>
       </Box>
@@ -1055,6 +1204,144 @@ export function NorvochBuilderShell({ initialProducts }: { initialProducts: Prod
           {notice}
         </Alert>
       </Snackbar>
+
+      <Drawer
+        anchor="right"
+        open={isCartDrawerOpen}
+        onClose={() => setIsCartDrawerOpen(false)}
+        PaperProps={{
+          sx: {
+            width: { xs: '100%', sm: 420 },
+            backgroundColor: '#fcfaf7',
+          },
+        }}
+      >
+        <Stack sx={{ height: '100%' }}>
+          <Box sx={{ p: 2.5, borderBottom: '1px solid', borderColor: 'divider' }}>
+            <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1}>
+              <Box>
+                <Typography variant="overline" color="secondary.main">
+                  Mock Cart
+                </Typography>
+                <Typography variant="h5">Your Selections</Typography>
+              </Box>
+              <Chip label={`${cartCount} items`} color="secondary" />
+            </Stack>
+            <Typography color="text.secondary" sx={{ mt: 1 }}>
+              This is a mock cart preview. Items appear here after using Add to Cart actions.
+            </Typography>
+          </Box>
+
+          <Stack spacing={1.25} sx={{ flex: 1, overflowY: 'auto', p: 2.5 }}>
+            {cartItems.length === 0 ? (
+              <Paper
+                variant="outlined"
+                sx={{
+                  p: 2,
+                  borderRadius: 3,
+                }}
+              >
+                <Typography variant="h6">Your cart is empty</Typography>
+                <Typography color="text.secondary" sx={{ mt: 0.75 }}>
+                  Add products from the detail modal to see them here.
+                </Typography>
+              </Paper>
+            ) : (
+              cartItems.map((item) => (
+                <Paper
+                  key={item.id}
+                  variant="outlined"
+                  sx={{
+                    p: 1.5,
+                    borderRadius: 3,
+                  }}
+                >
+                  <Stack direction="row" justifyContent="space-between" spacing={1.25}>
+                    <Stack direction="row" spacing={1.25} sx={{ minWidth: 0 }}>
+                      <Box
+                        sx={{
+                          width: 56,
+                          height: 56,
+                          borderRadius: 2,
+                          overflow: 'hidden',
+                          border: '1px solid',
+                          borderColor: 'divider',
+                          background: 'linear-gradient(135deg, rgba(250,244,236,1), rgba(236,225,212,1))',
+                          flexShrink: 0,
+                        }}
+                      >
+                        {productImageById.get(item.productId) ? (
+                          <Box
+                            component="img"
+                            src={productImageById.get(item.productId) ?? undefined}
+                            alt={item.title}
+                            sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                          />
+                        ) : null}
+                      </Box>
+                      <Stack spacing={0.5} sx={{ minWidth: 0 }}>
+                        <Typography fontWeight={600} sx={{ lineHeight: 1.2 }}>{item.title}</Typography>
+                        <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
+                          {item.goldOption ? <Chip label={`Gold: ${item.goldOption}`} size="small" variant="outlined" /> : null}
+                          {item.pinOption ? <Chip label={`Pin: ${item.pinOption}`} size="small" variant="outlined" /> : null}
+                          {item.placementLabel ? <Chip label={`Placement: ${item.placementLabel}`} size="small" variant="outlined" /> : null}
+                        </Stack>
+                      </Stack>
+                    </Stack>
+                    <Stack alignItems="flex-end" spacing={0.5}>
+                      <Typography fontWeight={600}>${item.unitPrice * item.quantity}</Typography>
+                      <Stack direction="row" spacing={0.5} alignItems="center">
+                        <Button size="small" variant="outlined" onClick={() => decrementCartLine(item.id)}>-</Button>
+                        <Typography variant="body2" sx={{ minWidth: 12, textAlign: 'center' }}>{item.quantity}</Typography>
+                        <Button size="small" variant="outlined" onClick={() => incrementCartLine(item.id)}>+</Button>
+                      </Stack>
+                      <Button size="small" onClick={() => requestRemoveCartLine(item.id)}>Remove</Button>
+                    </Stack>
+                  </Stack>
+                </Paper>
+              ))
+            )}
+          </Stack>
+
+          <Box sx={{ p: 2.5, borderTop: '1px solid', borderColor: 'divider', backgroundColor: '#fffdfb' }}>
+            <Stack spacing={1.25}>
+              <Stack direction="row" justifyContent="space-between">
+                <Typography color="text.secondary">Subtotal</Typography>
+                <Typography fontWeight={700}>${cartSubtotal}</Typography>
+              </Stack>
+              <Stack direction="row" spacing={1}>
+                <Button variant="outlined" fullWidth onClick={() => setIsCartDrawerOpen(false)}>
+                  Continue Shopping
+                </Button>
+                <Button
+                  variant="contained"
+                  fullWidth
+                  disabled={cartItems.length === 0}
+                  onClick={() => {
+                    setNotice('Mock checkout is not connected yet.');
+                    setIsCartDrawerOpen(false);
+                  }}
+                >
+                  Checkout
+                </Button>
+              </Stack>
+            </Stack>
+          </Box>
+        </Stack>
+      </Drawer>
+
+      <Dialog open={isRemoveConfirmOpen} onClose={cancelRemoveCartLine} maxWidth="xs" fullWidth>
+        <DialogTitle>Remove Item?</DialogTitle>
+        <DialogContent>
+          <Typography color="text.secondary">
+            Are you sure you want to remove this item from your cart?
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5 }}>
+          <Button onClick={cancelRemoveCartLine}>Cancel</Button>
+          <Button variant="contained" color="error" onClick={confirmRemoveCartLine}>Remove</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

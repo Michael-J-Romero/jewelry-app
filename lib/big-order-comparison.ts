@@ -2,6 +2,7 @@ type RawRecord = Record<string, unknown>;
 
 export type ComparedRow = {
   index: number;
+  matchKey: string;
   manualPresent: boolean;
   exportPresent: boolean;
   manualName: string;
@@ -11,8 +12,13 @@ export type ComparedRow = {
   manualQuantity: number;
   exportQuantity: number;
   matchedQuantity: number;
+  manualRowCount: number;
+  exportRowCount: number;
+  manualSampleRow: number | null;
+  exportSampleRow: number | null;
   nameMatches: boolean;
   priceMatches: boolean;
+  hasActualPriceMismatch: boolean;
   hasQuantityMismatch: boolean;
   suggestedExportIndex: number | null;
   suggestedExportName: string;
@@ -23,11 +29,16 @@ export type ComparedRow = {
 export type BigOrderComparison = {
   totalManualRows: number;
   totalExportRows: number;
+  totalManualCost: number;
+  totalExportCost: number;
+  totalCostDelta: number;
   comparedRowCount: number;
   perfectMatchCount: number;
   mismatchCount: number;
   titleMismatchCount: number;
   priceMismatchCount: number;
+  quantityMismatchCount: number;
+  fuzzySuggestionCount: number;
   missingRowCount: number;
   highConfidenceSuggestionCount: number;
   hasExactTitleAndPriceMatch: boolean;
@@ -35,15 +46,29 @@ export type BigOrderComparison = {
 };
 
 function toTrimmedString(value: unknown): string {
-  if (typeof value !== 'string') {
+  if (value === null || value === undefined) {
     return '';
   }
 
-  return value.trim();
+  if (typeof value === 'string') {
+    return value.trim();
+  }
+
+  return String(value).trim();
 }
 
-function normalizeTitle(value: string): string {
-  return value.replace(/\s+/g, '').toLowerCase();
+function normalizeSemanticTitle(value: string): string {
+  return toTrimmedString(value)
+    .replace(/\bCapicorn\b/gi, 'Capricorn')
+    .replace(/^11:11:00$/i, '11:11')
+    .replace(/\bDiamond Cut\s+/gi, '')
+    .replace(/\bPaperClip\b/gi, 'Paper Clip')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizeMatchText(value: string): string {
+  return normalizeSemanticTitle(value).toLowerCase().replace(/[^a-z0-9]+/g, '');
 }
 
 function toQuantityNumber(value: unknown): number {
@@ -62,12 +87,8 @@ function toQuantityNumber(value: unknown): number {
   return 1;
 }
 
-function normalizeLoose(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-}
-
 function tokenizeTitle(value: string): string[] {
-  const loose = normalizeLoose(value);
+  const loose = normalizeSemanticTitle(value).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
   if (!loose) {
     return [];
   }
@@ -76,7 +97,7 @@ function tokenizeTitle(value: string): string[] {
 }
 
 function buildBigrams(value: string): Set<string> {
-  const compact = normalizeLoose(value).replace(/\s+/g, '');
+  const compact = normalizeSemanticTitle(value).toLowerCase().replace(/[^a-z0-9]+/g, '');
   if (!compact) {
     return new Set();
   }
@@ -144,8 +165,8 @@ function scoreTitleSimilarity(manualName: string, exportName: string): number {
   const exportBigrams = buildBigrams(exportName);
   const charScore = diceCoefficient(manualBigrams, exportBigrams);
 
-  const manualCompact = normalizeLoose(manualName).replace(/\s+/g, '');
-  const exportCompact = normalizeLoose(exportName).replace(/\s+/g, '');
+  const manualCompact = normalizeMatchText(manualName);
+  const exportCompact = normalizeMatchText(exportName);
 
   const containsBoost =
     manualCompact && exportCompact && (manualCompact.includes(exportCompact) || exportCompact.includes(manualCompact))
@@ -160,21 +181,25 @@ function scoreTitleSimilarity(manualName: string, exportName: string): number {
 }
 
 type ExportSearchRow = {
-  exportIndex: number;
+  exportIndex: number | null;
   exportName: string;
+  exportQuantity: number;
+  exportPrice: number | null;
 };
 
 function findBestFuzzySuggestion(
   manualName: string,
+  manualQuantity: number,
+  manualPrice: number | null,
   availableExportRows: ExportSearchRow[],
-  tokenIndex: Map<string, number[]>,
-): { exportIndex: number; exportName: string; confidence: number } | null {
+  tokenIndex: Map<string, string[]>,
+): { exportIndex: number | null; exportName: string; confidence: number } | null {
   if (availableExportRows.length === 0) {
     return null;
   }
 
   const manualTokens = tokenizeTitle(manualName);
-  const candidateIndexes = new Set<number>();
+  const candidateNames = new Set<string>();
 
   manualTokens.forEach((token) => {
     const matches = tokenIndex.get(token);
@@ -182,20 +207,29 @@ function findBestFuzzySuggestion(
       return;
     }
 
-    matches.forEach((index) => {
-      candidateIndexes.add(index);
+    matches.forEach((name) => {
+      candidateNames.add(name);
     });
   });
 
   const candidates =
-    candidateIndexes.size > 0
-      ? availableExportRows.filter((row) => candidateIndexes.has(row.exportIndex))
+    candidateNames.size > 0
+      ? availableExportRows.filter((row) => candidateNames.has(row.exportName))
       : availableExportRows;
 
-  let bestMatch: { exportIndex: number; exportName: string; confidence: number } | null = null;
+  let bestMatch: { exportIndex: number | null; exportName: string; confidence: number } | null = null;
 
   candidates.forEach((candidate) => {
-    const confidence = scoreTitleSimilarity(manualName, candidate.exportName);
+    const nameScore = scoreTitleSimilarity(manualName, candidate.exportName);
+    const quantityBase = Math.max(manualQuantity, candidate.exportQuantity, 1);
+    const quantityScore = 1 - Math.abs(manualQuantity - candidate.exportQuantity) / quantityBase;
+
+    let priceScore = 0.5;
+    if (manualPrice !== null && candidate.exportPrice !== null) {
+      priceScore = manualPrice === candidate.exportPrice ? 1 : 0;
+    }
+
+    const confidence = Math.max(0, Math.min(1, 0.75 * nameScore + 0.15 * quantityScore + 0.1 * priceScore));
 
     if (!bestMatch || confidence > bestMatch.confidence) {
       bestMatch = {
@@ -227,78 +261,279 @@ function toPriceNumber(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function calculateDatasetTotal(rows: RawRecord[], priceField: string, quantityField: string): number {
+  return rows.reduce((sum, row) => {
+    const price = toPriceNumber(row[priceField]);
+    const quantity = toQuantityNumber(row[quantityField]);
+
+    if (price === null) {
+      return sum;
+    }
+
+    return sum + price * quantity;
+  }, 0);
+}
+
+function parseLineProperties(raw: unknown): Record<string, string> {
+  const text = toTrimmedString(raw);
+  if (!text) {
+    return {};
+  }
+
+  const props: Record<string, string> = {};
+  text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .forEach((line) => {
+      const colonIndex = line.indexOf(':');
+      if (colonIndex <= 0) {
+        return;
+      }
+
+      const key = line.slice(0, colonIndex).trim().toLowerCase();
+      const value = line.slice(colonIndex + 1).trim();
+      if (key && value) {
+        props[key] = value;
+      }
+    });
+
+  return props;
+}
+
+function extractFirstThreeDigitNumber(value: string): string {
+  return value.match(/\b\d{3}\b/)?.[0] ?? '';
+}
+
+function isGenericPropertyDrivenTitle(title: string): boolean {
+  const normalizedTitle = normalizeSemanticTitle(title).toLowerCase();
+  return ['angel numbers', 'astrological sign', 'zodiac constellations'].includes(normalizedTitle);
+}
+
+function extractAngelHintsFromProps(props: Record<string, string>): string[] {
+  const hints: string[] = [];
+  Object.entries(props).forEach(([key, value]) => {
+    if (!key.includes('angel number')) {
+      return;
+    }
+
+    hints.push(value);
+    const digitMatch = value.match(/\b\d{3}\b/);
+    if (digitMatch) {
+      hints.push(digitMatch[0]);
+    }
+  });
+
+  return hints;
+}
+
+function extractAngelHintsFromManualRow(row: RawRecord): string[] {
+  const hints: string[] = [];
+  const variation = toTrimmedString(row['Variation Name']);
+  if (variation) {
+    const variationNumber = variation.match(/\b\d{3}\b/);
+    if (variationNumber) {
+      hints.push(variationNumber[0]);
+    }
+  }
+
+  Object.keys(row).forEach((key) => {
+    const normalizedKey = key.toLowerCase();
+    if (!normalizedKey.includes('angel number')) {
+      return;
+    }
+
+    const value = toTrimmedString(row[key]);
+    if (value) {
+      hints.push(value);
+      const numberMatch = value.match(/\b\d{3}\b/);
+      if (numberMatch) {
+        hints.push(numberMatch[0]);
+      }
+    }
+  });
+
+  return [...new Set(hints.filter(Boolean))];
+}
+
+function extractSignHintsFromProps(props: Record<string, string>): string[] {
+  const sign = toTrimmedString(props['sign']);
+  if (!sign) {
+    return [];
+  }
+
+  return [normalizeSemanticTitle(sign)];
+}
+
+function buildCanonicalTitle(baseTitle: string, hints: string[]): string {
+  const cleanTitle = normalizeSemanticTitle(baseTitle);
+  if (!cleanTitle) {
+    return '';
+  }
+
+  const normalizedBase = cleanTitle.toLowerCase();
+
+  if (normalizedBase === 'angel numbers') {
+    const numberHint = hints.map(extractFirstThreeDigitNumber).find(Boolean);
+    if (numberHint) {
+      return `${numberHint} Angel Numbers`;
+    }
+  }
+
+  if (normalizedBase === 'astrological sign') {
+    const signHint = hints.find(Boolean);
+    if (signHint) {
+      return `${signHint} Astrological Sign`;
+    }
+  }
+
+  if (normalizedBase === 'zodiac constellations') {
+    const signHint = hints.find(Boolean);
+    if (signHint) {
+      return `${signHint} Zodiac Constellations`;
+    }
+  }
+
+  return cleanTitle;
+}
+
+function buildComparableName(baseTitle: string, hints: string[]): string {
+  const canonicalTitle = buildCanonicalTitle(baseTitle, hints);
+  if (canonicalTitle) {
+    return canonicalTitle;
+  }
+
+  const cleanTitle = normalizeSemanticTitle(baseTitle);
+  const titleKey = normalizeMatchText(cleanTitle);
+  const parts = [cleanTitle];
+
+  hints.forEach((hint) => {
+    const cleanHint = toTrimmedString(hint);
+    if (!cleanHint) {
+      return;
+    }
+
+    const hintKey = normalizeMatchText(cleanHint);
+    if (!hintKey || titleKey.includes(hintKey)) {
+      return;
+    }
+
+    parts.push(cleanHint);
+  });
+
+  return parts.join(' ').trim();
+}
+
+function makeDisplayName(baseTitle: string, comparableName: string): string {
+  if (isGenericPropertyDrivenTitle(baseTitle) && toTrimmedString(comparableName)) {
+    return normalizeSemanticTitle(comparableName);
+  }
+
+  if (toTrimmedString(baseTitle)) {
+    return normalizeSemanticTitle(baseTitle);
+  }
+
+  return normalizeSemanticTitle(comparableName) || '(blank title)';
+}
+
 export function compareBigOrderDatasets(
   manualRows: RawRecord[],
   exportRows: RawRecord[],
 ): BigOrderComparison {
   const HIGH_CONFIDENCE_THRESHOLD = 0.72;
+  const totalManualCost = calculateDatasetTotal(manualRows, 'Unit Cost', 'Quantity Ordered');
+  const totalExportCost = calculateDatasetTotal(exportRows, 'Line: Price', 'Line: Quantity');
 
-  type ParsedRow = {
-    index: number;
-    title: string;
-    normalizedTitle: string;
+  type PriceBucket = {
     price: number | null;
     quantity: number;
+    rowCount: number;
+    sampleRow: number | null;
   };
 
   type TitleGroup = {
-    normalizedTitle: string;
-    displayTitle: string;
-    manualEntries: ParsedRow[];
-    exportEntries: ParsedRow[];
+    titleKey: string;
+    displayName: string;
+    comparableName: string;
+    buckets: Map<string, PriceBucket>;
   };
 
-  const parsedManualRows: ParsedRow[] = manualRows.map((row, index) => {
-    const title = toTrimmedString(row['Item Name']);
-    return {
-      index,
-      title,
-      normalizedTitle: normalizeTitle(title),
-      price: toPriceNumber(row['Unit Cost']),
-      quantity: toQuantityNumber(row['Quantity Ordered']),
-    };
-  });
+  const manualGroups = new Map<string, TitleGroup>();
+  const exportGroups = new Map<string, TitleGroup>();
 
-  const parsedExportRows: ParsedRow[] = exportRows.map((row, index) => {
-    const title = toTrimmedString(row['Line: Title']);
-    return {
-      index,
-      title,
-      normalizedTitle: normalizeTitle(title),
-      price: toPriceNumber(row['Line: Price']),
-      quantity: toQuantityNumber(row['Line: Quantity']),
-    };
-  });
+  function upsertGroup(
+    target: Map<string, TitleGroup>,
+    titleKey: string,
+    displayName: string,
+    comparableName: string,
+    price: number | null,
+    quantity: number,
+    rowNumber: number,
+  ) {
+    const priceKey = price === null ? 'null' : String(price);
+    let group = target.get(titleKey);
 
-  const groupsByTitle = new Map<string, TitleGroup>();
-
-  function getOrCreateGroup(normalizedTitle: string, displayTitle: string): TitleGroup {
-    const existing = groupsByTitle.get(normalizedTitle);
-    if (existing) {
-      if (!existing.displayTitle && displayTitle) {
-        existing.displayTitle = displayTitle;
-      }
-      return existing;
+    if (!group) {
+      group = {
+        titleKey,
+        displayName,
+        comparableName,
+        buckets: new Map(),
+      };
+      target.set(titleKey, group);
     }
 
-    const created: TitleGroup = {
-      normalizedTitle,
-      displayTitle,
-      manualEntries: [],
-      exportEntries: [],
-    };
-    groupsByTitle.set(normalizedTitle, created);
-    return created;
+    const existingBucket = group.buckets.get(priceKey);
+    if (existingBucket) {
+      existingBucket.quantity += quantity;
+      existingBucket.rowCount += 1;
+      return;
+    }
+
+    group.buckets.set(priceKey, {
+      price,
+      quantity,
+      rowCount: 1,
+      sampleRow: rowNumber,
+    });
   }
 
-  parsedManualRows.forEach((row) => {
-    const group = getOrCreateGroup(row.normalizedTitle, row.title);
-    group.manualEntries.push(row);
+  manualRows.forEach((row, index) => {
+    const title = toTrimmedString(row['Item Name']);
+    const angelHints = extractAngelHintsFromManualRow(row);
+    const comparableName = buildComparableName(title, angelHints);
+    const displayName = makeDisplayName(title, comparableName);
+    const titleKey = normalizeMatchText(comparableName || title);
+
+    upsertGroup(
+      manualGroups,
+      titleKey,
+      displayName,
+      comparableName || displayName,
+      toPriceNumber(row['Unit Cost']),
+      toQuantityNumber(row['Quantity Ordered']),
+      index + 1,
+    );
   });
 
-  parsedExportRows.forEach((row) => {
-    const group = getOrCreateGroup(row.normalizedTitle, row.title);
-    group.exportEntries.push(row);
+  exportRows.forEach((row, index) => {
+    const title = toTrimmedString(row['Line: Title']);
+    const props = parseLineProperties(row['Line: Properties']);
+    const angelHints = extractAngelHintsFromProps(props);
+    const signHints = extractSignHintsFromProps(props);
+    const comparableName = buildComparableName(title, [...angelHints, ...signHints]);
+    const displayName = makeDisplayName(title, comparableName);
+    const titleKey = normalizeMatchText(comparableName || title);
+
+    upsertGroup(
+      exportGroups,
+      titleKey,
+      displayName,
+      comparableName || displayName,
+      toPriceNumber(row['Line: Price']),
+      toQuantityNumber(row['Line: Quantity']),
+      index + 1,
+    );
   });
 
   const mismatches: ComparedRow[] = [];
@@ -307,152 +542,242 @@ export function compareBigOrderDatasets(
   let perfectMatchCount = 0;
   let titleMismatchCount = 0;
   let priceMismatchCount = 0;
+  let quantityMismatchCount = 0;
+  let fuzzySuggestionCount = 0;
   let missingRowCount = 0;
   let highConfidenceSuggestionCount = 0;
 
-  const sortedGroups = [...groupsByTitle.values()].sort((a, b) => a.normalizedTitle.localeCompare(b.normalizedTitle));
+  const unionTitleKeys = new Set<string>([...manualGroups.keys(), ...exportGroups.keys()]);
+  const sortedTitleKeys = [...unionTitleKeys].sort((a, b) => a.localeCompare(b));
 
-  sortedGroups.forEach((group) => {
-    const manualTotalQuantity = group.manualEntries.reduce((sum, row) => sum + row.quantity, 0);
-    const exportTotalQuantity = group.exportEntries.reduce((sum, row) => sum + row.quantity, 0);
-    const manualTitle = group.manualEntries[0]?.title ?? '';
-    const exportTitle = group.exportEntries[0]?.title ?? '';
+  const pushComparedRow = (input: Omit<ComparedRow, 'index' | 'suggestedExportIndex' | 'suggestedExportName' | 'suggestionConfidence' | 'hasHighConfidenceSuggestion'>) => {
+    const comparedRow: ComparedRow = {
+      ...input,
+      index: comparedRows.length,
+      suggestedExportIndex: null,
+      suggestedExportName: '',
+      suggestionConfidence: null,
+      hasHighConfidenceSuggestion: false,
+    };
 
-    if (group.manualEntries.length === 0 || group.exportEntries.length === 0) {
-      const comparedRow: ComparedRow = {
-        index: comparedRows.length,
-        manualPresent: group.manualEntries.length > 0,
-        exportPresent: group.exportEntries.length > 0,
-        manualName: manualTitle,
-        exportName: exportTitle,
-        manualPrice: group.manualEntries[0]?.price ?? null,
-        exportPrice: group.exportEntries[0]?.price ?? null,
-        manualQuantity: manualTotalQuantity,
-        exportQuantity: exportTotalQuantity,
-        matchedQuantity: 0,
-        nameMatches: false,
-        priceMatches: false,
-        hasQuantityMismatch: manualTotalQuantity !== exportTotalQuantity,
-        suggestedExportIndex: null,
-        suggestedExportName: '',
-        suggestionConfidence: null,
-        hasHighConfidenceSuggestion: false,
-      };
+    comparedRows.push(comparedRow);
 
-      comparedRows.push(comparedRow);
-      mismatches.push(comparedRow);
-      titleMismatchCount += 1;
-      priceMismatchCount += 1;
-      missingRowCount += 1;
+    const isMismatch = !comparedRow.nameMatches || !comparedRow.priceMatches || comparedRow.hasQuantityMismatch;
+    if (!isMismatch) {
+      perfectMatchCount += 1;
       return;
     }
 
-    const manualByPrice = new Map<string, { price: number | null; quantity: number }>();
-    const exportByPrice = new Map<string, { price: number | null; quantity: number }>();
+    mismatches.push(comparedRow);
 
-    group.manualEntries.forEach((entry) => {
-      const key = entry.price === null ? 'null' : String(entry.price);
-      const existing = manualByPrice.get(key);
-      if (existing) {
-        existing.quantity += entry.quantity;
+    if (!comparedRow.nameMatches) {
+      titleMismatchCount += 1;
+      missingRowCount += 1;
+    }
+    if (comparedRow.hasActualPriceMismatch) {
+      priceMismatchCount += 1;
+    }
+    if (comparedRow.hasQuantityMismatch) {
+      quantityMismatchCount += 1;
+    }
+  };
+
+  sortedTitleKeys.forEach((titleKey) => {
+    const manualGroup = manualGroups.get(titleKey);
+    const exportGroup = exportGroups.get(titleKey);
+
+    if (!manualGroup || !exportGroup) {
+      const sourceGroup = manualGroup ?? exportGroup;
+      if (!sourceGroup) {
         return;
       }
 
-      manualByPrice.set(key, { price: entry.price, quantity: entry.quantity });
-    });
+      sourceGroup.buckets.forEach((bucket, priceKey) => {
+        const manualPresent = Boolean(manualGroup);
+        const exportPresent = Boolean(exportGroup);
 
-    group.exportEntries.forEach((entry) => {
-      const key = entry.price === null ? 'null' : String(entry.price);
-      const existing = exportByPrice.get(key);
-      if (existing) {
-        existing.quantity += entry.quantity;
+        pushComparedRow({
+          matchKey: `${titleKey}|${priceKey}|missing-side`,
+          manualPresent,
+          exportPresent,
+          manualName: manualGroup?.displayName ?? '',
+          exportName: exportGroup?.displayName ?? '',
+          manualPrice: manualGroup ? bucket.price : null,
+          exportPrice: exportGroup ? bucket.price : null,
+          manualQuantity: manualGroup ? bucket.quantity : 0,
+          exportQuantity: exportGroup ? bucket.quantity : 0,
+          matchedQuantity: 0,
+          manualRowCount: manualGroup ? bucket.rowCount : 0,
+          exportRowCount: exportGroup ? bucket.rowCount : 0,
+          manualSampleRow: manualGroup ? bucket.sampleRow : null,
+          exportSampleRow: exportGroup ? bucket.sampleRow : null,
+          nameMatches: false,
+          priceMatches: false,
+          hasActualPriceMismatch: false,
+          hasQuantityMismatch: true,
+        });
+      });
+
+      return;
+    }
+
+    const manualMutable = new Map(
+      [...manualGroup.buckets.entries()].map(([key, bucket]) => [key, { ...bucket }]),
+    );
+    const exportMutable = new Map(
+      [...exportGroup.buckets.entries()].map(([key, bucket]) => [key, { ...bucket }]),
+    );
+
+    // Exact price-to-price pairing first.
+    manualMutable.forEach((manualBucket, priceKey) => {
+      const exportBucket = exportMutable.get(priceKey);
+      if (!exportBucket || manualBucket.quantity <= 0 || exportBucket.quantity <= 0) {
         return;
       }
 
-      exportByPrice.set(key, { price: entry.price, quantity: entry.quantity });
+      const matched = Math.min(manualBucket.quantity, exportBucket.quantity);
+      pushComparedRow({
+        matchKey: `${titleKey}|${priceKey}|exact`,
+        manualPresent: true,
+        exportPresent: true,
+        manualName: manualGroup.displayName,
+        exportName: exportGroup.displayName,
+        manualPrice: manualBucket.price,
+        exportPrice: exportBucket.price,
+        manualQuantity: matched,
+        exportQuantity: matched,
+        matchedQuantity: matched,
+        manualRowCount: manualBucket.rowCount,
+        exportRowCount: exportBucket.rowCount,
+        manualSampleRow: manualBucket.sampleRow,
+        exportSampleRow: exportBucket.sampleRow,
+        nameMatches: true,
+        priceMatches: true,
+        hasActualPriceMismatch: false,
+        hasQuantityMismatch: false,
+      });
+
+      manualBucket.quantity -= matched;
+      exportBucket.quantity -= matched;
     });
 
-    const allPriceKeys = new Set<string>([...manualByPrice.keys(), ...exportByPrice.keys()]);
+    const manualRemainders = [...manualMutable.values()].filter((bucket) => bucket.quantity > 0);
+    const exportRemainders = [...exportMutable.values()].filter((bucket) => bucket.quantity > 0);
 
-    allPriceKeys.forEach((priceKey) => {
-      const manualPriceData = manualByPrice.get(priceKey);
-      const exportPriceData = exportByPrice.get(priceKey);
+    // Cross-price pairing to avoid false quantity mismatches when totals align but price buckets differ.
+    let manualIndex = 0;
+    let exportIndex = 0;
 
-      const manualQuantity = manualPriceData?.quantity ?? 0;
-      const exportQuantity = exportPriceData?.quantity ?? 0;
-      const matchedQuantity = Math.min(manualQuantity, exportQuantity);
+    while (manualIndex < manualRemainders.length && exportIndex < exportRemainders.length) {
+      const manualBucket = manualRemainders[manualIndex];
+      const exportBucket = exportRemainders[exportIndex];
 
-      const hasManual = manualQuantity > 0;
-      const hasExport = exportQuantity > 0;
-      const nameMatches = hasManual && hasExport;
-      const priceMatches =
-        hasManual &&
-        hasExport &&
-        manualPriceData?.price !== null &&
-        exportPriceData?.price !== null &&
-        manualPriceData?.price === exportPriceData?.price;
+      const matched = Math.min(manualBucket.quantity, exportBucket.quantity);
+      pushComparedRow({
+        matchKey: `${titleKey}|cross-price|${manualIndex}-${exportIndex}`,
+        manualPresent: true,
+        exportPresent: true,
+        manualName: manualGroup.displayName,
+        exportName: exportGroup.displayName,
+        manualPrice: manualBucket.price,
+        exportPrice: exportBucket.price,
+        manualQuantity: matched,
+        exportQuantity: matched,
+        matchedQuantity: matched,
+        manualRowCount: manualBucket.rowCount,
+        exportRowCount: exportBucket.rowCount,
+        manualSampleRow: manualBucket.sampleRow,
+        exportSampleRow: exportBucket.sampleRow,
+        nameMatches: true,
+        priceMatches:
+          manualBucket.price !== null && exportBucket.price !== null && manualBucket.price === exportBucket.price,
+        hasActualPriceMismatch:
+          manualBucket.price !== null && exportBucket.price !== null && manualBucket.price !== exportBucket.price,
+        hasQuantityMismatch: false,
+      });
 
-      const hasQuantityMismatch = manualQuantity !== exportQuantity;
-      const isMismatch = !nameMatches || !priceMatches || hasQuantityMismatch;
+      manualBucket.quantity -= matched;
+      exportBucket.quantity -= matched;
 
-      const comparedRow: ComparedRow = {
-        index: comparedRows.length,
-        manualPresent: hasManual,
-        exportPresent: hasExport,
-        manualName: manualTitle,
-        exportName: exportTitle,
-        manualPrice: manualPriceData?.price ?? null,
-        exportPrice: exportPriceData?.price ?? null,
-        manualQuantity,
-        exportQuantity,
-        matchedQuantity,
-        nameMatches,
-        priceMatches,
-        hasQuantityMismatch,
-        suggestedExportIndex: null,
-        suggestedExportName: '',
-        suggestionConfidence: null,
-        hasHighConfidenceSuggestion: false,
-      };
-
-      comparedRows.push(comparedRow);
-
-      if (isMismatch) {
-        mismatches.push(comparedRow);
-
-        if (!nameMatches) {
-          titleMismatchCount += 1;
-          missingRowCount += 1;
-        }
-
-        if (!priceMatches || hasQuantityMismatch) {
-          priceMismatchCount += 1;
-        }
-        return;
+      if (manualBucket.quantity <= 0) {
+        manualIndex += 1;
       }
+      if (exportBucket.quantity <= 0) {
+        exportIndex += 1;
+      }
+    }
 
-      perfectMatchCount += 1;
-    });
+    // Any leftovers are real quantity mismatches.
+    manualRemainders
+      .filter((bucket) => bucket.quantity > 0)
+      .forEach((bucket, remainderIndex) => {
+        pushComparedRow({
+          matchKey: `${titleKey}|manual-leftover|${remainderIndex}`,
+          manualPresent: true,
+          exportPresent: false,
+          manualName: manualGroup.displayName,
+          exportName: '',
+          manualPrice: bucket.price,
+          exportPrice: null,
+          manualQuantity: bucket.quantity,
+          exportQuantity: 0,
+          matchedQuantity: 0,
+          manualRowCount: bucket.rowCount,
+          exportRowCount: 0,
+          manualSampleRow: bucket.sampleRow,
+          exportSampleRow: null,
+          nameMatches: false,
+          priceMatches: false,
+          hasActualPriceMismatch: false,
+          hasQuantityMismatch: true,
+        });
+      });
+
+    exportRemainders
+      .filter((bucket) => bucket.quantity > 0)
+      .forEach((bucket, remainderIndex) => {
+        pushComparedRow({
+          matchKey: `${titleKey}|export-leftover|${remainderIndex}`,
+          manualPresent: false,
+          exportPresent: true,
+          manualName: '',
+          exportName: exportGroup.displayName,
+          manualPrice: null,
+          exportPrice: bucket.price,
+          manualQuantity: 0,
+          exportQuantity: bucket.quantity,
+          matchedQuantity: 0,
+          manualRowCount: 0,
+          exportRowCount: bucket.rowCount,
+          manualSampleRow: null,
+          exportSampleRow: bucket.sampleRow,
+          nameMatches: false,
+          priceMatches: false,
+          hasActualPriceMismatch: false,
+          hasQuantityMismatch: true,
+        });
+      });
   });
 
-  const unmatchedExportRows: ExportSearchRow[] = sortedGroups
-    .filter((group) => group.manualEntries.length === 0 && group.exportEntries.length > 0)
-    .map((group) => ({
-      exportIndex: group.exportEntries[0]?.index ?? -1,
-      exportName: group.exportEntries[0]?.title ?? '',
-    }))
-    .filter((row) => row.exportIndex >= 0);
+  const unmatchedExportRows: ExportSearchRow[] = mismatches
+    .filter((row) => !row.nameMatches && row.exportPresent)
+    .map((row) => ({
+      exportIndex: row.exportSampleRow,
+      exportName: row.exportName,
+      exportQuantity: row.exportQuantity,
+      exportPrice: row.exportPrice,
+    }));
 
-  const unmatchedTokenIndex = new Map<string, number[]>();
+  const unmatchedTokenIndex = new Map<string, string[]>();
   unmatchedExportRows.forEach(({ exportIndex, exportName }) => {
     tokenizeTitle(exportName).forEach((token) => {
       const queue = unmatchedTokenIndex.get(token);
       if (queue) {
-        queue.push(exportIndex);
+        queue.push(exportName);
         return;
       }
 
-      unmatchedTokenIndex.set(token, [exportIndex]);
+      unmatchedTokenIndex.set(token, [exportName]);
     });
   });
 
@@ -461,7 +786,13 @@ export function compareBigOrderDatasets(
       return;
     }
 
-    const suggestion = findBestFuzzySuggestion(row.manualName, unmatchedExportRows, unmatchedTokenIndex);
+    const suggestion = findBestFuzzySuggestion(
+      row.manualName,
+      row.manualQuantity,
+      row.manualPrice,
+      unmatchedExportRows,
+      unmatchedTokenIndex,
+    );
     if (!suggestion) {
       return;
     }
@@ -470,6 +801,7 @@ export function compareBigOrderDatasets(
     row.suggestedExportName = suggestion.exportName;
     row.suggestionConfidence = suggestion.confidence;
     row.hasHighConfidenceSuggestion = suggestion.confidence >= HIGH_CONFIDENCE_THRESHOLD;
+    fuzzySuggestionCount += 1;
 
     if (row.hasHighConfidenceSuggestion) {
       highConfidenceSuggestionCount += 1;
@@ -481,11 +813,16 @@ export function compareBigOrderDatasets(
   return {
     totalManualRows: manualRows.length,
     totalExportRows: exportRows.length,
+    totalManualCost,
+    totalExportCost,
+    totalCostDelta: totalManualCost - totalExportCost,
     comparedRowCount,
     perfectMatchCount,
     mismatchCount: mismatches.length,
     titleMismatchCount,
     priceMismatchCount,
+    quantityMismatchCount,
+    fuzzySuggestionCount,
     missingRowCount,
     highConfidenceSuggestionCount,
     hasExactTitleAndPriceMatch: mismatches.length === 0,

@@ -43,6 +43,12 @@ Step 7 — Big order data consistency validation page in progress
 - Flag row-level price mismatches: Unit Cost vs Line: Price
 - Run fuzzy similarity search for unresolved title mismatches
 - Surface confidence scores for potential manual-to-export title links
+- Reconcile duplicates by grouped totals so quantity matching is one-to-one at group level
+- Use export Line: Properties (for example Angel Number) as title augmentation for matching
+- Build canonical property-aware names for generic export titles like Angel Numbers, Astrological Sign, and Zodiac Constellations
+- Within each matched title, pair same-price buckets first and then cross-pair remaining quantities to avoid false quantity mismatches from price-bucket split differences
+- Calculate and display full dataset totals from unit price x quantity so manual vs export value can be compared at a glance
+- Add a clean downloadable spreadsheet export for the manual invoice dataset from /result
 - Display comparison summary and mismatch table on /result
 
 ## Proposed next step after approval
@@ -50,6 +56,8 @@ Step 7 — Big order data consistency validation page in progress
 Choose the highest-priority track for continued development:
 - Continue builder-only catalog polish for no-viewer mode, sticky controls, and lower-friction product detail access
 - Extend the product detail gallery with image swapping and zoom-friendly viewing for close inspection
+- Evolve the new cart drawer mock into a fuller cart flow with quantities, variant summaries, and checkout handoff
+- Add cart-item media quality and removal safeguards (thumbnail fidelity, destructive-action confirmations, undo patterns)
 - Real checkout and cart flow integration (order processing, payment)
 - Product image rendering and gallery enhancement
 - Product variants and customization options (size, color, gem selection)
