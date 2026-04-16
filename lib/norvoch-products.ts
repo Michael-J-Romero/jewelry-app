@@ -15,6 +15,9 @@ export type BuilderProduct = {
   images: string[];
   productType: string;
   available: boolean;
+  karatOptions: string[];
+  goldOptions: string[];
+  pinOptions: string[];
 };
 
 export type BuilderProductsSource = 'cache-first' | 'live';
@@ -66,6 +69,98 @@ function normalizeTags(tags: RawProduct['tags']) {
   return [];
 }
 
+function extractOptionValues(tags: string[], key: string) {
+  const normalizedKey = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  return Array.from(
+    new Set(
+      tags
+        .map((tag) => {
+          const separatorIndex = tag.indexOf(':');
+          if (separatorIndex < 0) {
+            return null;
+          }
+
+          const lhs = tag.slice(0, separatorIndex).toLowerCase().replace(/[^a-z0-9]/g, '');
+          if (lhs !== normalizedKey) {
+            return null;
+          }
+
+          return tag.slice(separatorIndex + 1).trim();
+        })
+        .filter(Boolean) as string[],
+    ),
+  );
+}
+
+function uniqueNormalized(values: string[], normalize: (value: string) => string) {
+  const map = new Map<string, string>();
+
+  values.forEach((value) => {
+    const normalized = normalize(value);
+
+    if (!normalized) {
+      return;
+    }
+
+    const key = normalized.toLowerCase();
+    if (!map.has(key)) {
+      map.set(key, normalized);
+    }
+  });
+
+  return Array.from(map.values());
+}
+
+function normalizeGoldOption(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/^\s*opt\s*-\s*(?:gold\s*)?color\s*:\s*/i, '')
+    .replace(/^\s*color\s*:\s*/i, '')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b(\d{1,2})\s*k\b/g, '$1k')
+    .replace(/\bgold\b/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function extractKaratTokens(values: string[]) {
+  const matches = values.flatMap((value) => {
+    const found = value.match(/\b(\d{1,2})\s*k\b/gi) ?? [];
+    return found.map((token) => `${Number(token.toLowerCase().replace('k', '').trim())}k`);
+  });
+
+  const unique = Array.from(new Set(matches));
+  unique.sort((a, b) => Number(a.replace('k', '')) - Number(b.replace('k', '')));
+  return unique;
+}
+
+function extractGoldOptions(tags: string[]) {
+  const colorOptions = [
+    ...extractOptionValues(tags, 'opt-Gold Color'),
+    ...extractOptionValues(tags, 'opt-Color'),
+    ...extractOptionValues(tags, 'Color'),
+  ];
+  const descriptiveTags = tags.filter(
+    (tag) => /(\d{1,2}\s*k).*(rose|white|yellow)|(rose|white|yellow).*(\d{1,2}\s*k)/i.test(tag),
+  );
+
+  return uniqueNormalized([...colorOptions, ...descriptiveTags], normalizeGoldOption).filter((option) => {
+    return option !== 'gold' && /\b\d{1,2}k\b/.test(option) && /\b(rose|white|yellow)\b/.test(option);
+  });
+}
+
+function extractKaratOptions(tags: string[]) {
+  const colorOptions = [
+    ...extractOptionValues(tags, 'opt-Gold Color'),
+    ...extractOptionValues(tags, 'opt-Color'),
+    ...extractOptionValues(tags, 'Color'),
+  ];
+  const goldRelatedTags = tags.filter((tag) => /\bgold\b/i.test(tag));
+
+  return extractKaratTokens([...colorOptions, ...goldRelatedTags]);
+}
+
 function inferCategory(product: RawProduct, tags: string[]): BuilderProduct['category'] {
   const haystack = `${product.product_type ?? ''} ${product.title} ${tags.join(' ')}`.toLowerCase();
 
@@ -115,6 +210,9 @@ function normalizeProduct(product: RawProduct): BuilderProduct {
   const firstVariant = product.variants?.[0];
   const firstPrice = firstVariant?.price ?? '0.00';
   const images = (product.images ?? []).map((image) => image.src).filter(Boolean) as string[];
+  const karatOptions = extractKaratOptions(tags);
+  const goldOptions = extractGoldOptions(tags);
+  const pinOptions = extractOptionValues(tags, 'opt-Pin');
 
   return {
     id: product.id,
@@ -130,6 +228,9 @@ function normalizeProduct(product: RawProduct): BuilderProduct {
     images,
     productType: product.product_type ?? 'Jewelry',
     available: Boolean(firstVariant?.available ?? true),
+    karatOptions,
+    goldOptions,
+    pinOptions,
   };
 }
 

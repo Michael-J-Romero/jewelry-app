@@ -29,6 +29,15 @@ Step 5 — Real product data integration complete
 - Updated builder initial catalog state to empty so mock products do not appear before live fetch completes
 - Added explicit mock fallback only for true API-empty or API-failure scenarios
 - Added catalog render diagnostics to show total products vs displayed products after active filters
+- Added structured tag option extraction for gold color/type and pin options in normalization
+- Updated sync script output to persist gold and pin option arrays in cached normalized products
+- Extended detail modal to display gold color/type options and pin options from normalized fields
+- Added UI fallback extraction from tags so older cache rows still show options
+- Refined gold option normalization to strip generic "gold" text, dedupe case-insensitively, and keep only descriptive options
+- Added separate karatOptions extraction (for values like 14k and 18k) so karat labels are not mixed into gold color/type options
+- Updated detail modal label to show "Gold color/type options (14k, 18k)" pattern when karat metadata exists
+- Hardened option parsing to normalize key prefixes and separators (e.g. opt-gold color / opt- color / color) before dedupe
+- Fixed duplicate collision where prefixed forms like "opt- color: 14k rose" could survive as separate entries from "14k rose"
 
 ## Delivered in the UI
 - fixed brand header with action buttons and live cart presence
@@ -41,12 +50,14 @@ Step 5 — Real product data integration complete
 - save and share feedback states plus live cart count updates
 - collection cards for Botanical, Space, and Marine merchandising
 - more polished mobile layout behavior and action stacking
+- product detail modal now shows gold color/type options and pin options when available
+- product detail modal now displays normalized gold color/type chips and separate karat summary in the section label
 
 ## Next planned review checkpoint
 ## Next planned work
 Choose the highest-priority track for iteration:
 - Build real checkout/cart flow with order processing
-- Add product image rendering from Shopify product images array
+- Add variant-aware option selection using extracted metadata (gold color and pin)
 - Implement product variant selection (size, color, gem options)
 - Enhance product filtering by material, gem type, and price range
 - Add visual polish and animation refinement passes

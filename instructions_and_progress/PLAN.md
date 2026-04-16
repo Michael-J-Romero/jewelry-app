@@ -34,7 +34,13 @@
 - Add logging and source diagnostics to debug live-vs-cache product behavior
 
 ## Current focus
-Step 5 complete. Ready for next iteration track.
+Step 6 — Product metadata enrichment in progress
+
+- Extract structured option metadata from Shopify tags during normalization
+- Surface option metadata in the product detail modal
+- Keep UI backward-compatible with older cached normalized files
+- Refine gold metadata normalization: dedupe values, strip option prefixes, split karat from color/type options
+- Harden parser against casing/whitespace/prefix variation to prevent duplicate semantic options
 
 ## Proposed next step after approval
 ## Proposed next steps

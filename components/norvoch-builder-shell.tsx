@@ -17,7 +17,11 @@ import {
   Stack,
   Typography,
 } from '@mui/material';
+import { EarCustomizer } from './ear-customizer';
 
+// Toggle this flag to show/hide the left ear customizer panel
+const noViewer = true;
+ 
 const tabs = ['All', 'Ends', 'Clickers', 'Rings', 'Charms', 'Chains', 'New', 'Best Sellers'] as const;
 const filterOptions = ['14k Gold', 'Pearl', 'Opal'] as const;
 
@@ -46,6 +50,9 @@ type Product = {
   images: string[];
   productType: string;
   available: boolean;
+  karatOptions?: string[];
+  goldOptions?: string[];
+  pinOptions?: string[];
 };
 
 const anchors: Anchor[] = [
@@ -89,14 +96,14 @@ const anchors: Anchor[] = [
 const mockProducts: Product[] = [
   {
     id: 1,
-    title: 'Botanical Stud',
-    price: '$120',
-    material: '14k gold · white opal',
-    description: 'A refined floral stud designed to layer softly into everyday ear stacks.',
+    title: 'test product',
+    price: '$100',
+    material: 'demo material',
+    description: 'demo description',
     category: 'Ends',
     badge: 'Best Sellers',
-    compatibleAnchors: ['flat', 'lobe-1', 'lobe-2'],
-    tags: ['14k Gold', 'Opal'],
+    compatibleAnchors: ['flat'],
+    tags: ['14k Gold'],
     images: [],
     productType: 'Ends with Gems',
     available: true,
@@ -203,6 +210,112 @@ const formatBadge = (badge?: Product['badge']) => {
   return badge === 'Best Sellers' ? 'Best Seller' : badge;
 };
 
+const extractOptionValuesFromTags = (tags: string[], key: string) => {
+  const normalizedKey = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  return Array.from(
+    new Set(
+      tags
+        .map((tag) => {
+          const separatorIndex = tag.indexOf(':');
+          if (separatorIndex < 0) {
+            return null;
+          }
+
+          const lhs = tag.slice(0, separatorIndex).toLowerCase().replace(/[^a-z0-9]/g, '');
+          if (lhs !== normalizedKey) {
+            return null;
+          }
+
+          return tag.slice(separatorIndex + 1).trim();
+        })
+        .filter(Boolean) as string[],
+    ),
+  );
+};
+
+const uniqueNormalized = (values: string[], normalize: (value: string) => string) => {
+  const map = new Map<string, string>();
+
+  values.forEach((value) => {
+    const normalized = normalize(value);
+    if (!normalized) {
+      return;
+    }
+
+    const key = normalized.toLowerCase();
+    if (!map.has(key)) {
+      map.set(key, normalized);
+    }
+  });
+
+  return Array.from(map.values());
+};
+
+const normalizeGoldOption = (value: string) => {
+  return value
+    .toLowerCase()
+    .replace(/^\s*opt\s*-\s*(?:gold\s*)?color\s*:\s*/i, '')
+    .replace(/^\s*color\s*:\s*/i, '')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b(\d{1,2})\s*k\b/g, '$1k')
+    .replace(/\bgold\b/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+};
+
+const extractKaratTokens = (values: string[]) => {
+  const matches = values.flatMap((value) => {
+    const found = value.match(/\b(\d{1,2})\s*k\b/gi) ?? [];
+    return found.map((token) => `${Number(token.toLowerCase().replace('k', '').trim())}k`);
+  });
+
+  const unique = Array.from(new Set(matches));
+  unique.sort((a, b) => Number(a.replace('k', '')) - Number(b.replace('k', '')));
+  return unique;
+};
+
+const getKaratOptions = (product: Product) => {
+  if (product.karatOptions && product.karatOptions.length > 0) {
+    return product.karatOptions;
+  }
+
+  const fromGoldColors = [
+    ...extractOptionValuesFromTags(product.tags, 'opt-Gold Color'),
+    ...extractOptionValuesFromTags(product.tags, 'opt-Color'),
+    ...extractOptionValuesFromTags(product.tags, 'Color'),
+  ];
+  const goldRelatedTags = product.tags.filter((tag) => /\bgold\b/i.test(tag));
+  return extractKaratTokens([...fromGoldColors, ...goldRelatedTags]);
+};
+
+const getGoldOptions = (product: Product) => {
+  if (product.goldOptions && product.goldOptions.length > 0) {
+    return product.goldOptions;
+  }
+
+  const fromTags = [
+    ...extractOptionValuesFromTags(product.tags, 'opt-Gold Color'),
+    ...extractOptionValuesFromTags(product.tags, 'opt-Color'),
+    ...extractOptionValuesFromTags(product.tags, 'Color'),
+  ];
+  const descriptiveTags = product.tags.filter(
+    (tag) => /(\d{1,2}\s*k).*(rose|white|yellow)|(rose|white|yellow).*(\d{1,2}\s*k)/i.test(tag),
+  );
+
+  return uniqueNormalized([...fromTags, ...descriptiveTags], normalizeGoldOption).filter((option) => {
+    return option !== 'gold' && /\b\d{1,2}k\b/.test(option) && /\b(rose|white|yellow)\b/.test(option);
+  });
+};
+
+const getPinOptions = (product: Product) => {
+  if (product.pinOptions && product.pinOptions.length > 0) {
+    return product.pinOptions;
+  }
+
+  return extractOptionValuesFromTags(product.tags, 'opt-Pin');
+};
+
 const getSubtotal = (placements: Record<string, string>, products: Product[]) => {
   return Object.values(placements).reduce((total, productId) => {
     const match = products.find((product) => String(product.id) === productId);
@@ -232,6 +345,9 @@ export function NorvochBuilderShell({ initialProducts }: { initialProducts: Prod
 
   const selectedAnchor = anchors.find((anchor) => anchor.id === selectedAnchorId) ?? null;
   const focusedProduct = products.find((product) => product.id === focusedProductId) ?? null;
+  const focusedKaratOptions = focusedProduct ? getKaratOptions(focusedProduct) : [];
+  const focusedGoldOptions = focusedProduct ? getGoldOptions(focusedProduct) : [];
+  const focusedPinOptions = focusedProduct ? getPinOptions(focusedProduct) : [];
 
   const filteredProducts = React.useMemo(() => products.filter((product) => {
     const anchorMatch = selectedAnchor ? product.compatibleAnchors.includes(selectedAnchor.id) : true;
@@ -407,248 +523,24 @@ export function NorvochBuilderShell({ initialProducts }: { initialProducts: Prod
           pt: { xs: '118px', md: '88px' },
           minHeight: '100vh',
           display: 'grid',
-          gridTemplateColumns: { xs: '1fr', lg: '1.35fr 1fr' },
+          gridTemplateColumns: noViewer ? '1fr' : { xs: '1fr', lg: '1.35fr 1fr' },
         }}
       >
-        <Paper
-          square
-          sx={{
-            height: { xs: 'auto', lg: 'calc(100vh - 88px)' },
-            position: { lg: 'sticky' },
-            top: { lg: 88 },
-            borderRight: { lg: '1px solid' },
-            borderColor: 'divider',
-            backgroundColor: 'background.default',
-          }}
-        >
-          <Stack sx={{ height: '100%', p: { xs: 2, md: 3 } }} spacing={2.5}>
-            <Paper
-              sx={{
-                p: 1.5,
-                display: { xs: 'block', lg: 'none' },
-                borderRadius: 3,
-                border: '1px solid',
-                borderColor: 'divider',
-                backgroundColor: 'rgba(255,255,255,0.86)',
-              }}
-            >
-              <Typography variant="overline" color="secondary.main">
-                Mobile builder status
-              </Typography>
-              <Typography color="text.secondary">
-                {selectedAnchor ? `Editing ${selectedAnchor.label}` : 'Tap a marker to choose a piercing'}
-              </Typography>
-            </Paper>
-
-            <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" useFlexGap>
-              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                <Chip label="Left Ear" color="secondary" />
-                <Chip label="Right Ear" variant="outlined" />
-              </Stack>
-              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                <Button size="small" variant="outlined">Zoom In</Button>
-                <Button size="small" variant="outlined">Zoom Out</Button>
-                <Button size="small" variant="text">Markers</Button>
-              </Stack>
-            </Stack>
-
-            <Paper
-              sx={{
-                position: 'relative',
-                flex: 1,
-                minHeight: { xs: 400, md: 520 },
-                overflow: 'hidden',
-                borderRadius: 5,
-                border: '1px solid',
-                borderColor: 'divider',
-                background:
-                  'radial-gradient(circle at top, rgba(190, 166, 103, 0.18), transparent 0 30%), linear-gradient(180deg, #fffdfa 0%, #f4eee6 100%)',
-              }}
-            >
-              <Box
-                sx={{
-                  position: 'absolute',
-                  inset: 0,
-                  display: 'grid',
-                  placeItems: 'center',
-                }}
-              >
-                <Box
-                  sx={{
-                    position: 'relative',
-                    width: { xs: 240, md: 320 },
-                    height: { xs: 360, md: 460 },
-                    borderRadius: '54% 46% 52% 48% / 20% 28% 72% 80%',
-                    border: '1.5px solid',
-                    borderColor: 'rgba(109, 93, 76, 0.28)',
-                    background:
-                      'linear-gradient(180deg, rgba(255,255,255,0.75), rgba(238,228,216,0.85))',
-                    boxShadow: 'inset -18px 0 30px rgba(156, 132, 110, 0.08)',
-                  }}
-                >
-                  <Box
-                    sx={{
-                      position: 'absolute',
-                      top: '18%',
-                      left: '28%',
-                      width: '42%',
-                      height: '54%',
-                      border: '1px solid rgba(109, 93, 76, 0.18)',
-                      borderRadius: '48% 52% 50% 50% / 30% 30% 70% 70%',
-                    }}
-                  />
-
-                  {anchors.map((anchor) => {
-                    const isSelected = anchor.id === selectedAnchorId;
-                    const isOccupied = Boolean(placements[anchor.id]);
-
-                    return (
-                      <motion.div
-                        key={anchor.id}
-                        whileHover={{ scale: 1.06 }}
-                        style={{ position: 'absolute', top: anchor.top, left: anchor.left }}
-                      >
-                        <Button
-                          onClick={() =>
-                            setSelectedAnchorId((current) => (current === anchor.id ? null : anchor.id))
-                          }
-                          sx={{
-                            minWidth: 0,
-                            width: 28,
-                            height: 28,
-                            p: 0,
-                            borderRadius: '50%',
-                            border: '2px solid',
-                            borderColor: isSelected ? 'secondary.main' : 'rgba(109, 93, 76, 0.42)',
-                            backgroundColor: '#fffdf9',
-                            boxShadow: isSelected ? '0 0 0 4px rgba(190,166,103,0.18)' : 'none',
-                            '&::after': isOccupied
-                              ? {
-                                  content: '""',
-                                  width: 8,
-                                  height: 8,
-                                  borderRadius: '50%',
-                                  backgroundColor: isSelected ? 'secondary.main' : '#6f6255',
-                                  display: 'block',
-                                }
-                              : undefined,
-                          }}
-                          aria-label={anchor.label}
-                        />
-                      </motion.div>
-                    );
-                  })}
-
-                  {placedEntries.map(({ anchor, product }) => (
-                    <motion.div
-                      key={`${anchor.id}-preview`}
-                      initial={{ opacity: 0.6, scale: 0.96 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      style={{
-                        position: 'absolute',
-                        top: `calc(${anchor.top} + 18px)`,
-                        left: `calc(${anchor.left} + 12px)`,
-                        maxWidth: '92px',
-                      }}
-                    >
-                      <Box
-                        sx={{
-                          px: 1,
-                          py: 0.4,
-                          borderRadius: 999,
-                          border: '1px solid',
-                          borderColor: 'rgba(190, 166, 103, 0.45)',
-                          backgroundColor: 'rgba(255,255,255,0.82)',
-                          fontSize: '0.68rem',
-                          color: 'text.secondary',
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                        }}
-                      >
-                        {product.title}
-                      </Box>
-                    </motion.div>
-                  ))}
-                </Box>
-              </Box>
-
-              {selectedAnchor && (
-                <Chip
-                  label={`${selectedAnchor.label}${selectedCurrentItem ? ` · ${selectedCurrentItem}` : ''}`}
-                  sx={{
-                    position: 'absolute',
-                    left: 24,
-                    bottom: 20,
-                    backgroundColor: 'rgba(255,255,255,0.94)',
-                  }}
-                />
-              )}
-
-              {!selectedAnchor && (
-                <Typography
-                  sx={{
-                    position: 'absolute',
-                    left: 24,
-                    bottom: 20,
-                    color: 'text.secondary',
-                  }}
-                >
-                  Select a piercing to start building your look.
-                </Typography>
-              )}
-            </Paper>
-
-            <Paper
-              sx={{
-                p: 2,
-                borderRadius: 4,
-                border: '1px solid',
-                borderColor: 'divider',
-                backgroundColor: 'rgba(255,255,255,0.88)',
-              }}
-            >
-              <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} justifyContent="space-between">
-                <Stack spacing={0.5}>
-                  <Typography variant="overline" color="secondary.main">
-                    Current composition
-                  </Typography>
-                  <Typography variant="body1">{pieceCount} pieces placed · ${subtotal} subtotal</Typography>
-                </Stack>
-                <Stack direction="row" spacing={1}>
-                  <Button variant="outlined" onClick={() => setIsStackOpen((current) => !current)}>
-                    {isStackOpen ? 'Hide Stack' : 'View Stack'}
-                  </Button>
-                  <Button variant="text" onClick={clearAll}>Clear All</Button>
-                </Stack>
-              </Stack>
-
-              {isStackOpen && (
-                <Stack spacing={1.25} sx={{ mt: 2 }}>
-                  {placedEntries.map(({ anchor, product }) => (
-                    <Paper
-                      key={`${anchor.id}-${product.id}`}
-                      sx={{
-                        p: 1.5,
-                        borderRadius: 3,
-                        border: '1px solid',
-                        borderColor: 'divider',
-                      }}
-                    >
-                      <Stack direction="row" justifyContent="space-between" spacing={1.5}>
-                        <Box>
-                          <Typography fontWeight={600}>{anchor.label}</Typography>
-                          <Typography color="text.secondary">{product.title} · {product.price}</Typography>
-                        </Box>
-                        <Button size="small" onClick={() => removePlacement(anchor.id)}>Remove</Button>
-                      </Stack>
-                    </Paper>
-                  ))}
-                </Stack>
-              )}
-            </Paper>
-          </Stack>
-        </Paper>
+        {!noViewer && (
+          <EarCustomizer
+            anchors={anchors}
+            placements={placements}
+            selectedAnchorId={selectedAnchorId}
+            onSelectAnchor={setSelectedAnchorId}
+            onRemovePlacement={removePlacement}
+            onClearAll={clearAll}
+            placedEntries={placedEntries}
+            isStackOpen={isStackOpen}
+            onToggleStack={() => setIsStackOpen((current) => !current)}
+            pieceCount={pieceCount}
+            subtotal={subtotal}
+          />
+        )}
 
         <Box
           sx={{
@@ -937,6 +829,39 @@ export function NorvochBuilderShell({ initialProducts }: { initialProducts: Prod
                 <Typography variant="caption" color="text.secondary">
                   Type: {focusedProduct.productType} · Compatible with: {focusedProduct.compatibleAnchors.join(', ')}
                 </Typography>
+                <Stack spacing={1}>
+                  <Typography variant="caption" color="text.secondary">
+                    Gold color/type options
+                    {focusedKaratOptions.length > 0 ? ` (${focusedKaratOptions.join(', ')})` : ''}
+                  </Typography>
+                  {focusedGoldOptions.length > 0 ? (
+                    <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
+                      {focusedGoldOptions.map((option) => (
+                        <Chip key={option} label={option} size="small" variant="outlined" />
+                      ))}
+                    </Stack>
+                  ) : (
+                    <Typography variant="caption" color="text.secondary">
+                      Not specified for this product.
+                    </Typography>
+                  )}
+                </Stack>
+                <Stack spacing={1}>
+                  <Typography variant="caption" color="text.secondary">
+                    Pin options
+                  </Typography>
+                  {focusedPinOptions.length > 0 ? (
+                    <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
+                      {focusedPinOptions.map((option) => (
+                        <Chip key={option} label={option} size="small" variant="outlined" />
+                      ))}
+                    </Stack>
+                  ) : (
+                    <Typography variant="caption" color="text.secondary">
+                      No pin variants listed in tags.
+                    </Typography>
+                  )}
+                </Stack>
               </Stack>
             </DialogContent>
             <DialogActions

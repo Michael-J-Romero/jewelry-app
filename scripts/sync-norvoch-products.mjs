@@ -19,6 +19,96 @@ function normalizeTags(tags) {
   return [];
 }
 
+function extractOptionValues(tags, key) {
+  const normalizedKey = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  return [...new Set(
+    tags
+      .map((tag) => {
+        const separatorIndex = tag.indexOf(':');
+        if (separatorIndex < 0) {
+          return null;
+        }
+
+        const lhs = tag.slice(0, separatorIndex).toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (lhs !== normalizedKey) {
+          return null;
+        }
+
+        return tag.slice(separatorIndex + 1).trim();
+      })
+      .filter(Boolean),
+  )];
+}
+
+function uniqueNormalized(values, normalize) {
+  const map = new Map();
+
+  values.forEach((value) => {
+    const normalized = normalize(value);
+
+    if (!normalized) {
+      return;
+    }
+
+    const key = normalized.toLowerCase();
+    if (!map.has(key)) {
+      map.set(key, normalized);
+    }
+  });
+
+  return [...map.values()];
+}
+
+function normalizeGoldOption(value) {
+  return value
+    .toLowerCase()
+    .replace(/^\s*opt\s*-\s*(?:gold\s*)?color\s*:\s*/i, '')
+    .replace(/^\s*color\s*:\s*/i, '')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b(\d{1,2})\s*k\b/g, '$1k')
+    .replace(/\bgold\b/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function extractKaratTokens(values) {
+  const matches = values.flatMap((value) => {
+    const found = value.match(/\b(\d{1,2})\s*k\b/gi) ?? [];
+    return found.map((token) => `${Number(token.toLowerCase().replace('k', '').trim())}k`);
+  });
+
+  const unique = [...new Set(matches)];
+  unique.sort((a, b) => Number(a.replace('k', '')) - Number(b.replace('k', '')));
+  return unique;
+}
+
+function extractGoldOptions(tags) {
+  const colorOptions = [
+    ...extractOptionValues(tags, 'opt-Gold Color'),
+    ...extractOptionValues(tags, 'opt-Color'),
+    ...extractOptionValues(tags, 'Color'),
+  ];
+  const descriptiveTags = tags.filter(
+    (tag) => /(\d{1,2}\s*k).*(rose|white|yellow)|(rose|white|yellow).*(\d{1,2}\s*k)/i.test(tag),
+  );
+
+  return uniqueNormalized([...colorOptions, ...descriptiveTags], normalizeGoldOption).filter((option) => {
+    return option !== 'gold' && /\b\d{1,2}k\b/.test(option) && /\b(rose|white|yellow)\b/.test(option);
+  });
+}
+
+function extractKaratOptions(tags) {
+  const colorOptions = [
+    ...extractOptionValues(tags, 'opt-Gold Color'),
+    ...extractOptionValues(tags, 'opt-Color'),
+    ...extractOptionValues(tags, 'Color'),
+  ];
+  const goldRelatedTags = tags.filter((tag) => /\bgold\b/i.test(tag));
+
+  return extractKaratTokens([...colorOptions, ...goldRelatedTags]);
+}
+
 function inferCategory(product, tags) {
   const haystack = `${product.product_type ?? ''} ${product.title} ${tags.join(' ')}`.toLowerCase();
   if (haystack.includes('clicker')) return 'Clickers';
@@ -75,6 +165,9 @@ async function fetchAllProducts() {
 function normalizeProduct(product) {
   const tags = normalizeTags(product.tags);
   const firstVariant = product.variants?.[0] ?? {};
+  const karatOptions = extractKaratOptions(tags);
+  const goldOptions = extractGoldOptions(tags);
+  const pinOptions = extractOptionValues(tags, 'opt-Pin');
 
   return {
     id: product.id,
@@ -90,6 +183,9 @@ function normalizeProduct(product) {
     images: (product.images ?? []).map((image) => image.src).filter(Boolean),
     productType: product.product_type ?? 'Jewelry',
     available: Boolean(firstVariant.available ?? true),
+    karatOptions,
+    goldOptions,
+    pinOptions,
   };
 }
 
