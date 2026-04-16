@@ -23,12 +23,25 @@
 - Improve cart and save-look interactions
 
 ### Step 4 — Polish and responsiveness
-- Refine motion, hover states, spacing, and breakpoints
-- Optimize mobile and tablet behavior
-- Final QA pass and cleanup
 
 ## Current focus
-Waiting for review of Step 1 — the first reviewable NorVoch page shell.
+### Step 5 — Real product data integration ✓ COMPLETE
+- Set up Shopify product data fetching and normalization pipeline
+- Build API route to serve normalized products with cache-first strategy
+- Refactor builder component to fetch real products on mount
+- Update all product tracking from name-based to ID-based lookups
+- Verify TypeScript compilation and data flow end-to-end
+- Add logging and source diagnostics to debug live-vs-cache product behavior
+
+## Current focus
+Step 5 complete. Ready for next iteration track.
 
 ## Proposed next step after approval
-Step 2 — deepen the builder interactions, especially selected piercing behavior, replacement/removal flows, and richer product-detail handling.
+## Proposed next steps
+Choose the highest-priority track for continued development:
+- Real checkout and cart flow integration (order processing, payment)
+- Product image rendering and gallery enhancement
+- Product variants and customization options (size, color, gem selection)
+- Advanced filtering and discovery (material, price, collection)
+- Visual polish and animation refinement
+- Inventory management and real-time availability
