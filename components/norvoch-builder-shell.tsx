@@ -178,24 +178,6 @@ const mockProducts: Product[] = [
   },
 ];
 
-const collections = [
-  {
-    title: 'Botanical',
-    note: 'Soft floral shapes and opal accents.',
-    tone: 'linear-gradient(135deg, #f8eee5 0%, #f3e3d5 100%)',
-  },
-  {
-    title: 'Space',
-    note: 'Celestial curves with brighter pavé details.',
-    tone: 'linear-gradient(135deg, #f3efe8 0%, #e7dece 100%)',
-  },
-  {
-    title: 'Marine',
-    note: 'Sculptural forms inspired by tide and shell lines.',
-    tone: 'linear-gradient(135deg, #efe8df 0%, #e3d7ca 100%)',
-  },
-];
-
 const initialPlacements: Record<string, string> = {
   helix: '2',
   conch: '3',
@@ -342,12 +324,19 @@ export function NorvochBuilderShell({ initialProducts }: { initialProducts: Prod
   const [savedLooks, setSavedLooks] = React.useState(0);
   const [cartCount, setCartCount] = React.useState(1);
   const [visibleCount, setVisibleCount] = React.useState(PAGE_SIZE);
+  const [focusedImageIndex, setFocusedImageIndex] = React.useState(0);
+  const [isImagePreviewOpen, setIsImagePreviewOpen] = React.useState(false);
+  const [isImagePreviewZoomed, setIsImagePreviewZoomed] = React.useState(false);
+  const [selectedGoldOption, setSelectedGoldOption] = React.useState<string | null>(null);
+  const [selectedPinOption, setSelectedPinOption] = React.useState<string | null>(null);
 
   const selectedAnchor = anchors.find((anchor) => anchor.id === selectedAnchorId) ?? null;
   const focusedProduct = products.find((product) => product.id === focusedProductId) ?? null;
   const focusedKaratOptions = focusedProduct ? getKaratOptions(focusedProduct) : [];
   const focusedGoldOptions = focusedProduct ? getGoldOptions(focusedProduct) : [];
   const focusedPinOptions = focusedProduct ? getPinOptions(focusedProduct) : [];
+  const focusedImages = focusedProduct?.images ?? [];
+  const focusedImageSrc = focusedImages[focusedImageIndex] ?? focusedImages[0] ?? null;
 
   const filteredProducts = React.useMemo(() => products.filter((product) => {
     const anchorMatch = selectedAnchor ? product.compatibleAnchors.includes(selectedAnchor.id) : true;
@@ -367,6 +356,20 @@ export function NorvochBuilderShell({ initialProducts }: { initialProducts: Prod
   React.useEffect(() => {
     setVisibleCount(PAGE_SIZE);
   }, [selectedAnchorId, activeTab, activeFilters]);
+
+  React.useEffect(() => {
+    setFocusedImageIndex(0);
+    setIsImagePreviewOpen(false);
+    setIsImagePreviewZoomed(false);
+  }, [focusedProductId]);
+
+  React.useEffect(() => {
+    setSelectedGoldOption(focusedGoldOptions[0] ?? null);
+  }, [focusedProductId, focusedGoldOptions]);
+
+  React.useEffect(() => {
+    setSelectedPinOption(focusedPinOptions[0] ?? null);
+  }, [focusedProductId, focusedPinOptions]);
 
   const visibleProducts = filteredProducts.slice(0, visibleCount);
   const hasMore = visibleCount < filteredProducts.length;
@@ -466,6 +469,20 @@ export function NorvochBuilderShell({ initialProducts }: { initialProducts: Prod
     setNotice(`${focusedProduct.title} added to cart.`);
   };
 
+  const showVirtualEarAlert = () => {
+    window.alert('Virtual ear curration not functional yet');
+  };
+
+  const openFocusedImage = () => {
+    if (!focusedImageSrc) {
+      setNotice('No larger image is available for this product.');
+      return;
+    }
+
+    setIsImagePreviewOpen(true);
+    setIsImagePreviewZoomed(false);
+  };
+
   return (
     <Box sx={{ minHeight: '100vh', backgroundColor: 'background.default' }}>
       <Box
@@ -547,100 +564,65 @@ export function NorvochBuilderShell({ initialProducts }: { initialProducts: Prod
             height: { xs: 'auto', lg: 'calc(100vh - 88px)' },
             overflowY: { xs: 'visible', lg: 'auto' },
             backgroundColor: '#fcfaf7',
+            display: 'flex',
+            flexDirection: 'column',
           }}
         >
-          <Stack spacing={2.5} sx={{ p: { xs: 2, md: 3 }, pb: 12 }}>
-            <Paper sx={{ p: 2.5, borderRadius: 4, border: '1px solid', borderColor: 'divider' }}>
-              {!selectedAnchor ? (
-                <Stack spacing={1}>
-                  <Typography variant="overline" color="secondary.main">
-                    Start your look
-                  </Typography>
-                  <Typography variant="h4">Best sellers and featured pieces</Typography>
-                  <Typography color="text.secondary">
-                    Choose a piercing point on the left to narrow the catalog by compatibility.
-                  </Typography>
-                </Stack>
-              ) : (
-                <Stack spacing={1}>
-                  <Typography variant="overline" color="secondary.main">
-                    Selected piercing
-                  </Typography>
-                  <Typography variant="h4">{selectedAnchor.label}</Typography>
-                  <Typography color="text.secondary">{selectedAnchor.compatibility}</Typography>
-                  <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                    {selectedCurrentItem ? (
-                      <Chip label={`Current: ${selectedCurrentItem}`} />
-                    ) : (
-                      <Chip label="Currently empty" variant="outlined" />
-                    )}
-                    <Chip
-                      label="Remove item"
-                      variant="outlined"
-                      onClick={() => selectedAnchorId && removePlacement(selectedAnchorId)}
-                    />
-                    <Chip label="Deselect" onClick={() => setSelectedAnchorId(null)} />
-                  </Stack>
-                </Stack>
-              )}
-            </Paper>
+          {/* Sticky filter section */}
+          <Box
+            sx={{
+              position: 'sticky',
+              top: 0,
+              zIndex: 10,
+              backgroundColor: '#fcfaf7',
+              p: { xs: 2, md: 3 },
+              borderBottom: '1px solid',
+              borderColor: 'divider',
+            }}
+          >
+            <Stack spacing={1.5}>
+              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                {tabs.map((tab) => (
+                  <Chip
+                    key={tab}
+                    label={tab}
+                    onClick={() => setActiveTab(tab)}
+                    color={activeTab === tab ? 'secondary' : 'default'}
+                    variant={activeTab === tab ? 'filled' : 'outlined'}
+                  />
+                ))}
+              </Stack>
 
-            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-              {tabs.map((tab) => (
-                <Chip
-                  key={tab}
-                  label={tab}
-                  onClick={() => setActiveTab(tab)}
-                  color={activeTab === tab ? 'secondary' : 'default'}
-                  variant={activeTab === tab ? 'filled' : 'outlined'}
-                />
-              ))}
+              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                {filterOptions.map((filter) => (
+                  <Chip
+                    key={filter}
+                    label={filter}
+                    onClick={() => toggleFilter(filter)}
+                    color={activeFilters.includes(filter) ? 'secondary' : 'default'}
+                    variant={activeFilters.includes(filter) ? 'filled' : 'outlined'}
+                  />
+                ))}
+                <Chip label="Clear All" onClick={() => setActiveFilters([])} />
+              </Stack>
             </Stack>
+          </Box>
 
-            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-              {filterOptions.map((filter) => (
-                <Chip
-                  key={filter}
-                  label={filter}
-                  onClick={() => toggleFilter(filter)}
-                  color={activeFilters.includes(filter) ? 'secondary' : 'default'}
-                  variant={activeFilters.includes(filter) ? 'filled' : 'outlined'}
-                />
-              ))}
-              <Chip label="Clear All" onClick={() => setActiveFilters([])} />
-            </Stack>
-
+          {/* Scrollable product grid */}
+          <Box
+            sx={{
+              flex: 1,
+              overflow: 'auto',
+              p: { xs: 2, md: 3 },
+              pb: noViewer ? 4 : 12,
+            }}
+          >
             <Box
               sx={{
                 display: 'grid',
-                gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' },
-                gap: 1.5,
-              }}
-            >
-              {collections.map((collection) => (
-                <Paper
-                  key={collection.title}
-                  sx={{
-                    p: 2,
-                    borderRadius: 4,
-                    border: '1px solid',
-                    borderColor: 'divider',
-                    background: collection.tone,
-                  }}
-                >
-                  <Typography variant="overline" color="secondary.main">
-                    Collection
-                  </Typography>
-                  <Typography variant="h6">{collection.title}</Typography>
-                  <Typography color="text.secondary">{collection.note}</Typography>
-                </Paper>
-              ))}
-            </Box>
-
-            <Box
-              sx={{
-                display: 'grid',
-                gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
+                gridTemplateColumns: noViewer
+                  ? { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)', lg: 'repeat(4, 1fr)' }
+                  : { xs: '1fr', sm: '1fr 1fr' },
                 gap: 2,
               }}
             >
@@ -661,6 +643,15 @@ export function NorvochBuilderShell({ initialProducts }: { initialProducts: Prod
                     >
                       <Stack spacing={1.5}>
                         <Box
+                          onClick={() => setFocusedProductId(product.id)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault();
+                              setFocusedProductId(product.id);
+                            }
+                          }}
+                          role="button"
+                          tabIndex={0}
                           sx={{
                             height: 150,
                             borderRadius: 3,
@@ -668,7 +659,19 @@ export function NorvochBuilderShell({ initialProducts }: { initialProducts: Prod
                             border: '1px solid',
                             borderColor: 'divider',
                             background: 'linear-gradient(135deg, rgba(250,244,236,1), rgba(236,225,212,1))',
+                            cursor: 'pointer',
+                            transition: 'transform 160ms ease, border-color 160ms ease',
+                            '&:hover': {
+                              transform: 'scale(1.01)',
+                              borderColor: 'secondary.main',
+                            },
+                            '&:focus-visible': {
+                              outline: '2px solid',
+                              outlineColor: 'secondary.main',
+                              outlineOffset: 2,
+                            },
                           }}
+                          aria-label={`Open details for ${product.title}`}
                         >
                           {product.images[0] && (
                             <Box
@@ -705,12 +708,12 @@ export function NorvochBuilderShell({ initialProducts }: { initialProducts: Prod
                             Details
                           </Button>
                           <Button
-                            variant={selectedAnchor ? 'contained' : 'outlined'}
+                            variant="contained"
                             fullWidth
-                            disabled={!selectedAnchor || !product.available}
-                            onClick={() => placeProduct(product)}
+                            disabled={!product.available}
+                            onClick={showVirtualEarAlert}
                           >
-                            {selectedCurrentItem ? 'Replace' : 'Add / Try On'}
+                            Add to Ear
                           </Button>
                         </Stack>
                       </Stack>
@@ -721,7 +724,7 @@ export function NorvochBuilderShell({ initialProducts }: { initialProducts: Prod
             </Box>
 
             {hasMore && (
-              <Box sx={{ display: 'flex', justifyContent: 'center', pt: 1 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'center', pt: 2 }}>
                 <Button variant="outlined" onClick={() => setVisibleCount((n) => n + PAGE_SIZE)}>
                   Show more ({filteredProducts.length - visibleCount} remaining)
                 </Button>
@@ -736,28 +739,30 @@ export function NorvochBuilderShell({ initialProducts }: { initialProducts: Prod
                 </Typography>
               </Paper>
             )}
-          </Stack>
+          </Box>
 
-          <Paper
-            sx={{
-              position: 'sticky',
-              bottom: 0,
-              zIndex: 5,
-              p: 2,
-              borderTop: '1px solid',
-              borderColor: 'divider',
-              backgroundColor: 'rgba(255,255,255,0.94)',
-              backdropFilter: 'blur(10px)',
-            }}
-          >
-            <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} justifyContent="space-between">
-              <Typography>{pieceCount} pieces · ${subtotal} subtotal</Typography>
-              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
-                <Button variant="outlined" onClick={saveLook}>Save Look</Button>
-                <Button variant="contained" onClick={addAllToCart}>Add All to Cart</Button>
+          {!noViewer && (
+            <Paper
+              sx={{
+                position: 'sticky',
+                bottom: 0,
+                zIndex: 5,
+                p: 2,
+                borderTop: '1px solid',
+                borderColor: 'divider',
+                backgroundColor: 'rgba(255,255,255,0.94)',
+                backdropFilter: 'blur(10px)',
+              }}
+            >
+              <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} justifyContent="space-between">
+                <Typography>{pieceCount} pieces · ${subtotal} subtotal</Typography>
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+                  <Button variant="outlined" onClick={saveLook}>Save Look</Button>
+                  <Button variant="contained" onClick={addAllToCart}>Add All to Cart</Button>
+                </Stack>
               </Stack>
-            </Stack>
-          </Paper>
+            </Paper>
+          )}
         </Box>
       </Box>
 
@@ -777,10 +782,10 @@ export function NorvochBuilderShell({ initialProducts }: { initialProducts: Prod
                     background: 'linear-gradient(135deg, rgba(250,244,236,1), rgba(236,225,212,1))',
                   }}
                 >
-                  {focusedProduct.images[0] && (
+                  {focusedImageSrc && (
                     <Box
                       component="img"
-                      src={focusedProduct.images[0]}
+                      src={focusedImageSrc}
                       alt={focusedProduct.title}
                       sx={{
                         width: '100%',
@@ -791,6 +796,19 @@ export function NorvochBuilderShell({ initialProducts }: { initialProducts: Prod
                     />
                   )}
                 </Box>
+                <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1}>
+                  <Typography variant="caption" color="text.secondary">
+                    Click a thumbnail to change the main image.
+                  </Typography>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    disabled={!focusedImageSrc}
+                    onClick={openFocusedImage}
+                  >
+                    Open Full Size
+                  </Button>
+                </Stack>
                 {focusedProduct.images.length > 1 && (
                   <Stack direction="row" spacing={1} sx={{ overflowX: 'auto', pb: 0.5 }}>
                     {focusedProduct.images.map((src, i) => (
@@ -799,6 +817,7 @@ export function NorvochBuilderShell({ initialProducts }: { initialProducts: Prod
                         component="img"
                         src={src}
                         alt={`${focusedProduct.title} view ${i + 1}`}
+                        onClick={() => setFocusedImageIndex(i)}
                         sx={{
                           width: 72,
                           height: 72,
@@ -806,8 +825,9 @@ export function NorvochBuilderShell({ initialProducts }: { initialProducts: Prod
                           borderRadius: 2,
                           objectFit: 'cover',
                           border: '1px solid',
-                          borderColor: i === 0 ? 'secondary.main' : 'divider',
+                          borderColor: i === focusedImageIndex ? 'secondary.main' : 'divider',
                           cursor: 'pointer',
+                          opacity: i === focusedImageIndex ? 1 : 0.74,
                         }}
                       />
                     ))}
@@ -837,7 +857,15 @@ export function NorvochBuilderShell({ initialProducts }: { initialProducts: Prod
                   {focusedGoldOptions.length > 0 ? (
                     <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
                       {focusedGoldOptions.map((option) => (
-                        <Chip key={option} label={option} size="small" variant="outlined" />
+                        <Chip
+                          key={option}
+                          label={option}
+                          size="small"
+                          clickable
+                          onClick={() => setSelectedGoldOption(option)}
+                          color={selectedGoldOption === option ? 'secondary' : 'default'}
+                          variant={selectedGoldOption === option ? 'filled' : 'outlined'}
+                        />
                       ))}
                     </Stack>
                   ) : (
@@ -853,7 +881,15 @@ export function NorvochBuilderShell({ initialProducts }: { initialProducts: Prod
                   {focusedPinOptions.length > 0 ? (
                     <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
                       {focusedPinOptions.map((option) => (
-                        <Chip key={option} label={option} size="small" variant="outlined" />
+                        <Chip
+                          key={option}
+                          label={option}
+                          size="small"
+                          clickable
+                          onClick={() => setSelectedPinOption(option)}
+                          color={selectedPinOption === option ? 'secondary' : 'default'}
+                          variant={selectedPinOption === option ? 'filled' : 'outlined'}
+                        />
                       ))}
                     </Stack>
                   ) : (
@@ -874,31 +910,139 @@ export function NorvochBuilderShell({ initialProducts }: { initialProducts: Prod
                 gap: 1,
               }}
             >
-              <Button onClick={() => setFocusedProductId(null)}>Close</Button>
-              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ width: { xs: '100%', sm: 'auto' } }}>
-                <Button
+              <Stack spacing={1.25} sx={{ flex: 1, width: '100%' }}>
+                <Paper
                   variant="outlined"
-                  onClick={() => {
-                    addFocusedProductToCart();
-                    setFocusedProductId(null);
+                  sx={{
+                    p: 1.25,
+                    borderRadius: 3,
+                    backgroundColor: 'rgba(252, 250, 247, 0.95)',
                   }}
                 >
-                  Add to Cart
-                </Button>
-                <Button
-                  variant="contained"
-                  disabled={!selectedAnchor}
-                  onClick={() => {
-                    placeProduct(focusedProduct);
-                    setFocusedProductId(null);
-                  }}
+                  <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+                    <Typography fontWeight={600}>{focusedProduct.title}</Typography>
+                    <Typography color="primary.main" fontWeight={600}>{focusedProduct.price}</Typography>
+                    <Chip
+                      label={selectedGoldOption ? `Gold: ${selectedGoldOption}` : 'Gold: not selected'}
+                      color={selectedGoldOption ? 'secondary' : 'default'}
+                      variant={selectedGoldOption ? 'filled' : 'outlined'}
+                      size="small"
+                    />
+                    <Chip
+                      label={selectedPinOption ? `Pin: ${selectedPinOption}` : 'Pin: not selected'}
+                      color={selectedPinOption ? 'secondary' : 'default'}
+                      variant={selectedPinOption ? 'filled' : 'outlined'}
+                      size="small"
+                    />
+                  </Stack>
+                </Paper>
+                <Stack
+                  direction={{ xs: 'column', sm: 'row' }}
+                  spacing={1}
+                  justifyContent="space-between"
+                  sx={{ width: '100%' }}
                 >
-                  Add to Selected Piercing
-                </Button>
+                  <Button onClick={() => setFocusedProductId(null)}>Close</Button>
+                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ width: { xs: '100%', sm: 'auto' } }}>
+                    <Button
+                      variant="outlined"
+                      onClick={() => {
+                        addFocusedProductToCart();
+                        setFocusedProductId(null);
+                      }}
+                    >
+                      Add to Cart
+                    </Button>
+                    <Button
+                      variant="contained"
+                      disabled={!selectedAnchor}
+                      onClick={() => {
+                        placeProduct(focusedProduct);
+                        setFocusedProductId(null);
+                      }}
+                    >
+                      Add to Selected Piercing
+                    </Button>
+                  </Stack>
+                </Stack>
               </Stack>
             </DialogActions>
           </>
         ) : null}
+      </Dialog>
+
+      <Dialog
+        open={isImagePreviewOpen}
+        onClose={() => {
+          setIsImagePreviewOpen(false);
+          setIsImagePreviewZoomed(false);
+        }}
+        fullWidth
+        maxWidth="lg"
+      >
+        <DialogTitle>
+          {focusedProduct ? `${focusedProduct.title} - Click Image to Zoom` : 'Product Image'}
+        </DialogTitle>
+        <DialogContent>
+          <Box
+            sx={{
+              minHeight: { xs: 340, md: 620 },
+              maxHeight: '75vh',
+              overflow: 'auto',
+              borderRadius: 3,
+              border: '1px solid',
+              borderColor: 'divider',
+              backgroundColor: '#f8f4ee',
+              p: 2,
+              display: 'grid',
+              placeItems: 'center',
+            }}
+          >
+            {focusedImageSrc ? (
+              <Box
+                component="img"
+                src={focusedImageSrc}
+                alt={focusedProduct?.title ?? 'Focused product image'}
+                onClick={() => setIsImagePreviewZoomed((current) => !current)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    setIsImagePreviewZoomed((current) => !current);
+                  }
+                }}
+                tabIndex={0}
+                role="button"
+                sx={{
+                  width: '100%',
+                  maxWidth: '100%',
+                  maxHeight: '70vh',
+                  objectFit: 'contain',
+                  cursor: isImagePreviewZoomed ? 'zoom-out' : 'zoom-in',
+                  transform: isImagePreviewZoomed ? 'scale(1.9)' : 'scale(1)',
+                  transformOrigin: 'center center',
+                  transition: 'transform 140ms ease',
+                  '&:focus-visible': {
+                    outline: '2px solid',
+                    outlineColor: 'secondary.main',
+                    outlineOffset: 2,
+                  },
+                }}
+              />
+            ) : (
+              <Typography color="text.secondary">No larger image is available for this product.</Typography>
+            )}
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3 }}>
+          <Button
+            onClick={() => {
+              setIsImagePreviewOpen(false);
+              setIsImagePreviewZoomed(false);
+            }}
+          >
+            Close
+          </Button>
+        </DialogActions>
       </Dialog>
 
       <Snackbar

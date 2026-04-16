@@ -38,6 +38,26 @@ Step 5 — Real product data integration complete
 - Updated detail modal label to show "Gold color/type options (14k, 18k)" pattern when karat metadata exists
 - Hardened option parsing to normalize key prefixes and separators (e.g. opt-gold color / opt- color / color) before dedupe
 - Fixed duplicate collision where prefixed forms like "opt- color: 14k rose" could survive as separate entries from "14k rose"
+- Split the ear viewer into a dedicated component and added a top-level noViewer toggle for builder-free catalog mode
+- Reworked the catalog layout for noViewer mode with a denser responsive grid and sticky filter controls under the fixed header
+- Removed the selected-piercing summary block, removed the collection merchandising strip, and hid the sticky footer bar in noViewer mode
+- Made the product media area keyboard- and mouse-clickable to open the detail modal with less friction
+- Replaced the card-level replace CTA with an Add to Ear placeholder action that shows a temporary virtual-ear alert
+- Added detail-modal thumbnail selection so the active product image can be swapped inline
+- Simplified larger-image viewing by opening the active image at full size so browser-native zoom controls handle inspection
+- Made gold color/type and pin options single-select inside the detail modal with clear active highlighting
+- Added a compact selected-product summary above the detail modal cart actions with name, price, and chosen options
+- Added lib/big-order-comparison.ts to compare manual invoice and Shopify export rows by index
+- Added row-order, title, and price validation logic: Item Name vs Line: Title and Unit Cost vs Line: Price
+- Added app/result/page.tsx to display dataset counts, mismatch totals, and a row-level mismatch table
+- Added a status banner on /result indicating whether the two datasets are an exact ordered match
+- Refactored comparator to match rows by normalized titles before price comparison
+- Normalized title matching now ignores case and all whitespace differences
+- Removed order-based mismatch assumptions and now report unmatched titles instead
+- Extended mismatch table with manual row index and linked export row index for traceability
+- Added second-pass fuzzy title search for unresolved mismatches (token overlap + character similarity + length score)
+- Added per-row confidence ratings for suggested title links to export rows
+- Added summary metric for high-confidence fuzzy suggestions on /result
 
 ## Delivered in the UI
 - fixed brand header with action buttons and live cart presence
@@ -52,6 +72,12 @@ Step 5 — Real product data integration complete
 - more polished mobile layout behavior and action stacking
 - product detail modal now shows gold color/type options and pin options when available
 - product detail modal now displays normalized gold color/type chips and separate karat summary in the section label
+- no-viewer mode now uses sticky catalog filters, hides the lower sticky cart summary bar, and opens product details from the media region
+- product cards now use an Add to Ear placeholder alert, and the detail modal now supports image swapping plus browser-native full-size image viewing
+- detail modal option chips now support one-at-a-time gold and pin selection, with the active configuration echoed above checkout actions
+- new /result route now displays reconciliation results for the bigOrder1 manual invoice and Shopify export datasets
+- /result now links matching titles first and only flags unmatched titles or price differences
+- /result now also suggests similar title matches for unresolved rows with confidence percentages
 
 ## Next planned review checkpoint
 ## Next planned work
@@ -62,3 +88,4 @@ Choose the highest-priority track for iteration:
 - Enhance product filtering by material, gem type, and price range
 - Add visual polish and animation refinement passes
 - Real-time inventory and availability checking
+- Add CSV/JSON export and grouped mismatch diagnostics for reconciliation workflows

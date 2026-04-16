@@ -34,20 +34,26 @@
 - Add logging and source diagnostics to debug live-vs-cache product behavior
 
 ## Current focus
-Step 6 — Product metadata enrichment in progress
+Step 7 — Big order data consistency validation page in progress
 
-- Extract structured option metadata from Shopify tags during normalization
-- Surface option metadata in the product detail modal
-- Keep UI backward-compatible with older cached normalized files
-- Refine gold metadata normalization: dedupe values, strip option prefixes, split karat from color/type options
-- Harden parser against casing/whitespace/prefix variation to prevent duplicate semantic options
+- Build a comparator for manual invoice rows vs Shopify export rows
+- Match rows by normalized title (case-insensitive and whitespace-insensitive)
+- Stop assuming both datasets share index order
+- Flag unmatched title rows: Item Name vs Line: Title
+- Flag row-level price mismatches: Unit Cost vs Line: Price
+- Run fuzzy similarity search for unresolved title mismatches
+- Surface confidence scores for potential manual-to-export title links
+- Display comparison summary and mismatch table on /result
 
 ## Proposed next step after approval
 ## Proposed next steps
 Choose the highest-priority track for continued development:
+- Continue builder-only catalog polish for no-viewer mode, sticky controls, and lower-friction product detail access
+- Extend the product detail gallery with image swapping and zoom-friendly viewing for close inspection
 - Real checkout and cart flow integration (order processing, payment)
 - Product image rendering and gallery enhancement
 - Product variants and customization options (size, color, gem selection)
 - Advanced filtering and discovery (material, price, collection)
 - Visual polish and animation refinement
 - Inventory management and real-time availability
+- Data cleanup tooling for invoice/export reconciliation
