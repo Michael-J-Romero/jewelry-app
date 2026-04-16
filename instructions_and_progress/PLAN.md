@@ -34,7 +34,9 @@
 - Add logging and source diagnostics to debug live-vs-cache product behavior
 
 ## Current focus
-Step 7 — Big order data consistency validation page in progress
+Step 7 — Big order data consistency validation (internal-only tooling) in progress
+
+- Security hardening pass: remove public-facing reconciliation and invoice export routes so bigOrder1 data is not web-accessible
 
 - Build a comparator for manual invoice rows vs Shopify export rows
 - Match rows by normalized title (case-insensitive and whitespace-insensitive)
@@ -48,8 +50,7 @@ Step 7 — Big order data consistency validation page in progress
 - Build canonical property-aware names for generic export titles like Angel Numbers, Astrological Sign, and Zodiac Constellations
 - Within each matched title, pair same-price buckets first and then cross-pair remaining quantities to avoid false quantity mismatches from price-bucket split differences
 - Calculate and display full dataset totals from unit price x quantity so manual vs export value can be compared at a glance
-- Add a clean downloadable spreadsheet export for the manual invoice dataset from /result
-- Display comparison summary and mismatch table on /result
+- Keep reconciliation outputs internal-only; do not expose bigOrder1 datasets via public app routes
 
 ## Proposed next step after approval
 ## Proposed next steps

@@ -4,6 +4,8 @@
 Step 5 — Real product data integration complete
 
 ## Completed so far
+- Removed the public /result page route to prevent exposing bigOrder1 reconciliation data
+- Removed the public /api/manual-invoice-export route to prevent exporting manual invoice data over the web
 - Reviewed the full design brief in Main.txt
 - Verified the requested package set is available in node_modules
 - Replaced the generic starter storefront UI with a NorVoch builder shell
@@ -99,6 +101,7 @@ Step 5 — Real product data integration complete
 - /result now surfaces quantity deltas for grouped comparisons and sample source rows for traceability
 - /result now shows manual total cost, export total cost, and the overall dataset value delta
 - /result now includes a top-right button to download a clean invoice spreadsheet as CSV
+- Security hardening update: removed both public result and manual-invoice-export routes from the app tree
 
 ## Next planned review checkpoint
 ## Next planned work
