@@ -215,9 +215,10 @@ const getSubtotal = (placements: Record<string, string>, products: Product[]) =>
   }, 0);
 };
 
-export function NorvochBuilderShell() {
-  const [products, setProducts] = React.useState<Product[]>([]);
-  const [loadingProducts, setLoadingProducts] = React.useState(true);
+const PAGE_SIZE = 24;
+
+export function NorvochBuilderShell({ initialProducts }: { initialProducts: Product[] }) {
+  const products = initialProducts.length > 0 ? initialProducts : mockProducts;
   const [selectedAnchorId, setSelectedAnchorId] = React.useState<string | null>('helix');
   const [activeTab, setActiveTab] = React.useState<Tab>('All');
   const [activeFilters, setActiveFilters] = React.useState<FilterOption[]>([]);
@@ -227,59 +228,12 @@ export function NorvochBuilderShell() {
   const [notice, setNotice] = React.useState('');
   const [savedLooks, setSavedLooks] = React.useState(0);
   const [cartCount, setCartCount] = React.useState(1);
-
-  React.useEffect(() => {
-    const fetchProducts = async () => {
-      try {
-        const response = await fetch('/api/products?source=live', { cache: 'no-store' });
-        if (!response.ok) {
-          throw new Error(`Product API request failed: ${response.status}`);
-        }
-
-        const data = await response.json();
-
-        console.info('[NorvochBuilder] Product payload received', {
-          requestedSource: data.requestedSource,
-          resolvedSource: data.resolvedSource,
-          usedFallback: data.usedFallback,
-          count: data.count,
-          cachedCount: data.cachedCount,
-          liveCount: data.liveCount,
-          error: data.error,
-          sampleTitles: Array.isArray(data.products)
-            ? data.products.slice(0, 5).map((product: Product) => product.title)
-            : [],
-        });
-
-        if (Array.isArray(data.products) && data.products.length > 0) {
-          setProducts(data.products);
-        } else {
-          console.warn(
-            '[NorvochBuilder] Product API returned no products, using mock catalog as fallback',
-          );
-          setProducts(mockProducts);
-        }
-
-        if (data.usedFallback) {
-          console.warn('[NorvochBuilder] API used fallback data instead of live catalog', {
-            error: data.error,
-          });
-        }
-      } catch (error) {
-        console.error('Failed to load products:', error);
-        console.warn('[NorvochBuilder] Falling back to mock catalog due to request failure');
-        setProducts(mockProducts);
-      } finally {
-        setLoadingProducts(false);
-      }
-    };
-    fetchProducts();
-  }, []);
+  const [visibleCount, setVisibleCount] = React.useState(PAGE_SIZE);
 
   const selectedAnchor = anchors.find((anchor) => anchor.id === selectedAnchorId) ?? null;
   const focusedProduct = products.find((product) => product.id === focusedProductId) ?? null;
 
-  const filteredProducts = products.filter((product) => {
+  const filteredProducts = React.useMemo(() => products.filter((product) => {
     const anchorMatch = selectedAnchor ? product.compatibleAnchors.includes(selectedAnchor.id) : true;
     const tabMatch =
       activeTab === 'All'
@@ -291,18 +245,15 @@ export function NorvochBuilderShell() {
       activeFilters.length === 0 ? true : activeFilters.every((tag) => product.tags.includes(tag));
 
     return anchorMatch && tabMatch && filterMatch;
-  });
+  }), [products, selectedAnchor, activeTab, activeFilters]);
 
+  // Reset pagination when filters change
   React.useEffect(() => {
-    console.info('[NorvochBuilder] Catalog render state', {
-      loadingProducts,
-      totalProducts: products.length,
-      displayedCount: filteredProducts.length,
-      selectedAnchorId,
-      activeTab,
-      activeFilters,
-    });
-  }, [loadingProducts, products.length, filteredProducts.length, selectedAnchorId, activeTab, activeFilters]);
+    setVisibleCount(PAGE_SIZE);
+  }, [selectedAnchorId, activeTab, activeFilters]);
+
+  const visibleProducts = filteredProducts.slice(0, visibleCount);
+  const hasMore = visibleCount < filteredProducts.length;
 
   const placedEntries = Object.entries(placements)
     .map(([anchorId, productId]) => {
@@ -801,7 +752,7 @@ export function NorvochBuilderShell() {
                 gap: 2,
               }}
             >
-              {filteredProducts.map((product) => {
+              {visibleProducts.map((product) => {
                 const isPlaced = Object.values(placements).includes(String(product.id));
 
                 return (
@@ -821,20 +772,37 @@ export function NorvochBuilderShell() {
                           sx={{
                             height: 150,
                             borderRadius: 3,
-                            background:
-                              'linear-gradient(135deg, rgba(250,244,236,1), rgba(236,225,212,1))',
+                            overflow: 'hidden',
                             border: '1px solid',
                             borderColor: 'divider',
+                            background: 'linear-gradient(135deg, rgba(250,244,236,1), rgba(236,225,212,1))',
                           }}
-                        />
-                        <Stack direction="row" justifyContent="space-between" spacing={1}>
+                        >
+                          {product.images[0] && (
+                            <Box
+                              component="img"
+                              src={product.images[0]}
+                              alt={product.title}
+                              sx={{
+                                width: '100%',
+                                height: '100%',
+                                objectFit: 'cover',
+                                display: 'block',
+                              }}
+                            />
+                          )}
+                        </Box>
+                        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
                           <Typography variant="h6" sx={{ fontSize: '1rem' }}>
                             {product.title}
                           </Typography>
-                          {product.badge ? <Chip label={formatBadge(product.badge)} size="small" /> : null}
+                          <Stack direction="row" spacing={0.5} flexShrink={0}>
+                            {product.badge ? <Chip label={formatBadge(product.badge)} size="small" /> : null}
+                            {!product.available ? <Chip label="Sold out" size="small" variant="outlined" /> : null}
+                          </Stack>
                         </Stack>
-                        <Typography color="text.secondary">{product.material}</Typography>
-                        <Typography color="text.secondary" sx={{ minHeight: 42 }}>
+                        <Typography color="text.secondary" variant="body2">{product.material}</Typography>
+                        <Typography color="text.secondary" variant="body2" sx={{ minHeight: 42 }}>
                           {product.description}
                         </Typography>
                         <Typography color="primary.main" fontWeight={600}>
@@ -847,7 +815,7 @@ export function NorvochBuilderShell() {
                           <Button
                             variant={selectedAnchor ? 'contained' : 'outlined'}
                             fullWidth
-                            disabled={!selectedAnchor}
+                            disabled={!selectedAnchor || !product.available}
                             onClick={() => placeProduct(product)}
                           >
                             {selectedCurrentItem ? 'Replace' : 'Add / Try On'}
@@ -860,7 +828,15 @@ export function NorvochBuilderShell() {
               })}
             </Box>
 
-            {!loadingProducts && filteredProducts.length === 0 && (
+            {hasMore && (
+              <Box sx={{ display: 'flex', justifyContent: 'center', pt: 1 }}>
+                <Button variant="outlined" onClick={() => setVisibleCount((n) => n + PAGE_SIZE)}>
+                  Show more ({filteredProducts.length - visibleCount} remaining)
+                </Button>
+              </Box>
+            )}
+
+            {filteredProducts.length === 0 && (
               <Paper sx={{ p: 3, borderRadius: 4, border: '1px solid', borderColor: 'divider' }}>
                 <Typography variant="h6">No pieces match this filter combination.</Typography>
                 <Typography color="text.secondary" sx={{ mt: 0.75 }}>
@@ -901,21 +877,65 @@ export function NorvochBuilderShell() {
               <Stack spacing={2}>
                 <Box
                   sx={{
-                    height: 220,
+                    height: 280,
                     borderRadius: 3,
-                    background:
-                      'linear-gradient(135deg, rgba(250,244,236,1), rgba(236,225,212,1))',
+                    overflow: 'hidden',
                     border: '1px solid',
                     borderColor: 'divider',
+                    background: 'linear-gradient(135deg, rgba(250,244,236,1), rgba(236,225,212,1))',
                   }}
-                />
-                <Typography>{focusedProduct.material}</Typography>
-                <Typography color="primary.main" fontWeight={600}>
-                  {focusedProduct.price}
-                </Typography>
+                >
+                  {focusedProduct.images[0] && (
+                    <Box
+                      component="img"
+                      src={focusedProduct.images[0]}
+                      alt={focusedProduct.title}
+                      sx={{
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover',
+                        display: 'block',
+                      }}
+                    />
+                  )}
+                </Box>
+                {focusedProduct.images.length > 1 && (
+                  <Stack direction="row" spacing={1} sx={{ overflowX: 'auto', pb: 0.5 }}>
+                    {focusedProduct.images.map((src, i) => (
+                      <Box
+                        key={i}
+                        component="img"
+                        src={src}
+                        alt={`${focusedProduct.title} view ${i + 1}`}
+                        sx={{
+                          width: 72,
+                          height: 72,
+                          flexShrink: 0,
+                          borderRadius: 2,
+                          objectFit: 'cover',
+                          border: '1px solid',
+                          borderColor: i === 0 ? 'secondary.main' : 'divider',
+                          cursor: 'pointer',
+                        }}
+                      />
+                    ))}
+                  </Stack>
+                )}
+                <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+                  <Typography color="primary.main" fontWeight={600} variant="h6">
+                    {focusedProduct.price}
+                  </Typography>
+                  {focusedProduct.badge && (
+                    <Chip label={formatBadge(focusedProduct.badge)} size="small" />
+                  )}
+                  {!focusedProduct.available && (
+                    <Chip label="Out of stock" size="small" color="default" variant="outlined" />
+                  )}
+                </Stack>
+                <Typography color="text.secondary">{focusedProduct.material}</Typography>
                 <Typography color="text.secondary">{focusedProduct.description}</Typography>
-                <Typography color="text.secondary">
-                  Compatible with: {focusedProduct.compatibleAnchors.join(', ')}
+                <Typography variant="caption" color="text.secondary">
+                  Type: {focusedProduct.productType} · Compatible with: {focusedProduct.compatibleAnchors.join(', ')}
                 </Typography>
               </Stack>
             </DialogContent>
